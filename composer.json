@@ -1,0 +1,64 @@
+{
+    "name": "omnitech-solutions/flowlight-blueprint-extension",
+    "description": "Blueprint extension for generating DTOs, Organizers, and API first components",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        { "name": "Desmond O'Leary", "email": "doleary@gmail.com", "homepage": "https://github.com/desoleary", "role": "Maintainer" }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Flowlight\\Generator\\": "src/"
+        }
+    },
+    "suggest": {
+        "ext-xdebug": "Enable code coverage and debugging",
+        "ext-pcov": "Faster code coverage as an alternative to Xdebug"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Flowlight\\Generator\\Providers\\FlowlightServiceProvider"
+            ]
+        }
+    },
+    "require": {
+        "php": "^8.1",
+        "illuminate/support": "^9.0|^10.0|^11.0",
+        "illuminate/console": "^9.0|^10.0|^11.0",
+        "illuminate/filesystem": "^9.0|^10.0|^11.0",
+        "illuminate/container": "^9.0|^10.0|^11.0",
+        "illuminate/config": "^9.0|^10.0|^11.0",
+        "illuminate/translation": "^9.0|^10.0|^11.0",
+        "illuminate/validation": "^9.0|^10.0|^11.0",
+        "spatie/laravel-data": "^4.17|^5.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0",
+        "pestphp/pest": "^2.36",
+        "laravel/pint": "^1.24",
+        "phpstan/phpstan": "^2.1",
+        "infection/infection": "^0.31.2",
+        "roave/security-advisories": "dev-latest",
+        "squizlabs/php_codesniffer": "*",
+        "laravel-shift/blueprint": "^2.12",
+        "jasonmccreary/laravel-test-assertions": "^2.5",
+        "pestphp/pest-plugin-laravel": "^2.4"
+    },
+    "scripts": {
+        "ci": "make ci",
+        "test": "php -d memory_limit=2048M ./vendor/bin/pest",
+        "test:coverage": "php -d memory_limit=2048M vendor/bin/pest --coverage",
+        "lint": "make lint",
+        "format": "make static-codestyle-fix",
+        "format:check": "make static-codestyle-check",
+        "analyse": "make static-phpstan",
+        "clean": "make clean"
+    },
+    "config": {
+        "allow-plugins": {
+            "infection/extension-installer": true,
+            "pestphp/pest-plugin": true
+        }
+    }
+}
