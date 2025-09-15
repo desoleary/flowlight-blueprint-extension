@@ -3,68 +3,72 @@
 namespace Flowlight\Generator\Providers;
 
 use Blueprint\Blueprint;
+use Flowlight\Generator\Generators\ApiGenerator;
 use Flowlight\Generator\Generators\DtoGenerator;
 use Flowlight\Generator\Generators\OrganizerGenerator;
-use Illuminate\Foundation\Application;
+use Illuminate\Contracts\Support\DeferrableProvider;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Service provider for Flowlight code generation.
+ * Service provider for Flowlight Blueprint extension.
  *
- * This provider integrates Flowlight’s DTO and Organizer generators
- * into Laravel and Blueprint. It handles:
- *
- * - Publishing configuration (`flowlight.php`) and stubs
- *   (`stubs/flowlight`) when running in console.
- * - Extending Blueprint to register custom generators:
- *   {@see DtoGenerator} and {@see OrganizerGenerator}.
- * - Merging Flowlight’s default field types config into the
- *   application configuration.
+ * Registers config, publishes stubs, and hooks custom
+ * generators into Blueprint.
  */
-class FlowlightServiceProvider extends ServiceProvider
+class FlowlightServiceProvider extends ServiceProvider implements DeferrableProvider
 {
-    /**
-     * Bootstrap any application services.
-     *
-     * - Publishes Flowlight config and stubs when running in console.
-     * - Extends Blueprint to add Flowlight generators.
-     */
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            // Publish default config
             $this->publishes([
-                __DIR__.'/../../config/field-types.php' => config_path('flowlight.php'),
+                __DIR__.'/../../config/flowlight_blueprint.php' => config_path('flowlight_blueprint.php'),
             ], 'flowlight-config');
 
-            // Publish stubs for customization
             $this->publishes([
                 __DIR__.'/../../stubs' => base_path('stubs/flowlight'),
             ], 'flowlight-stubs');
         }
+    }
 
-        // Extend Blueprint with Flowlight generators
-        $this->app->extend(Blueprint::class, function (Blueprint $blueprint, Application $app) {
-            /** @var \Illuminate\Filesystem\Filesystem $files */
+    public function register(): void
+    {
+        $this->mergeConfigFrom(
+            __DIR__.'/../../config/flowlight_blueprint.php',
+            'flowlight'
+        );
+
+        $this->app->singleton(ApiGenerator::class, function ($app): ApiGenerator {
             $files = $app->make('files');
 
-            $blueprint->registerGenerator(new DtoGenerator($files));
-            $blueprint->registerGenerator(new OrganizerGenerator($files));
+            return new ApiGenerator($files);
+        });
+
+        $this->app->extend(Blueprint::class, function (Blueprint $blueprint, $app) {
+            $blueprint->registerGenerator($app->make(ApiGenerator::class));
 
             return $blueprint;
         });
     }
 
     /**
-     * Register any application services.
-     *
-     * - Merges Flowlight’s default configuration into the app config.
+     * @return array<class-string>
      */
-    public function register(): void
+    public function provides(): array
     {
-        $this->mergeConfigFrom(
-            __DIR__.'/../../config/field-types.php',
-            'flowlight'
+        return array_merge(
+            $this->defaultGenerators(),
+            [Blueprint::class, ApiGenerator::class]
         );
+    }
+
+    /**
+     * @return list<class-string>
+     */
+    protected function defaultGenerators(): array
+    {
+        return [
+            DtoGenerator::class,
+            OrganizerGenerator::class,
+        ];
     }
 }

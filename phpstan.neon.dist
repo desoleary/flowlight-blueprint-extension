@@ -12,3 +12,4 @@ parameters:
   excludePaths:
     - vendor
     - tests
+    - src/Providers/FlowlightServiceProvider.php

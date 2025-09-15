@@ -1,5 +1,6 @@
 <?php
 
+use Blueprint\Tree;
 use Flowlight\Generator\Console\Commands\GenerateApiCommand;
 use Symfony\Component\Console\Application as ConsoleApplication;
 use Symfony\Component\Console\Command\Command;
@@ -107,26 +108,23 @@ describe('handle', function () {
     });
 
     it('handles null fields option by setting it to empty string', function () {
-        // Mock Blueprint and Tree
         $blueprint = Mockery::mock(\Blueprint\Blueprint::class);
-        $tree = Mockery::mock(\Blueprint\Tree::class);
 
-        $blueprint->shouldReceive('parse')->andReturn($tree);
-        $blueprint->shouldReceive('generate')->andReturn([
-            'User.php' => '<?php // generated',
+        // ✅ return an array, not a Tree
+        $blueprint->shouldReceive('parse')->andReturn([
+            'api' => [
+                'User' => ['fields' => []],
+            ],
         ]);
 
-        // Bind the mock blueprint to the Laravel container
+        $blueprint->shouldReceive('generate')->andReturn([
+            'created' => ['User.php'],
+        ]);
+
         app()->instance(\Blueprint\Blueprint::class, $blueprint);
 
-        // Create command tester
         $tester = new CommandTester($this->consoleApp->find('flowlight:generate'));
-
-        // Execute without providing --fields option (which will be null)
-        $tester->execute([
-            'entity' => 'User',
-            // Don't include --fields option to test null case
-        ]);
+        $tester->execute(['entity' => 'User']);
 
         expect($tester->getStatusCode())->toBe(Command::SUCCESS);
         expect($tester->getDisplay())->toContain('Generated:');
@@ -135,24 +133,30 @@ describe('handle', function () {
     });
 
     it('runs successfully with valid inputs', function () {
-        // Mock Blueprint and Tree
         $blueprint = Mockery::mock(\Blueprint\Blueprint::class);
-        $tree = Mockery::mock(\Blueprint\Tree::class);
 
-        $blueprint->shouldReceive('parse')->andReturn($tree);
-        $blueprint->shouldReceive('generate')->andReturn([
-            'User.php' => '<?php // generated',
-            'UserData.php' => '<?php // generated data',
-            'UserOrganizer.php' => '<?php // generated organizer',
+        // ✅ return an array, not a Tree
+        $blueprint->shouldReceive('parse')->andReturn([
+            'api' => [
+                'User' => [
+                    'fields' => ['name' => ['type' => 'string']],
+                    'dto' => [],
+                    'organizers' => true,
+                ],
+            ],
         ]);
 
-        // Bind the mock blueprint to the Laravel container
+        $blueprint->shouldReceive('generate')->andReturn([
+            'created' => [
+                'User.php',
+                'UserData.php',
+                'UserOrganizer.php',
+            ],
+        ]);
+
         app()->instance(\Blueprint\Blueprint::class, $blueprint);
 
-        // Create command tester
         $tester = new CommandTester($this->consoleApp->find('flowlight:generate'));
-
-        // Execute with valid inputs
         $tester->execute([
             'entity' => 'User',
             '--fields' => 'name:string email:string?',

@@ -48,7 +48,7 @@
     "scripts": {
         "ci": "make ci",
         "test": "php -d memory_limit=2048M ./vendor/bin/pest",
-        "test:coverage": "php -d memory_limit=2048M vendor/bin/pest --coverage",
+        "test:coverage": "php -d memory_limit=2048M ./vendor/bin/pest --coverage",
         "lint": "make lint",
         "format": "make static-codestyle-fix",
         "format:check": "make static-codestyle-check",

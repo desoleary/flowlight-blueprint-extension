@@ -1,0 +1,20 @@
+<?php
+
+namespace {{ namespace }};
+
+use Flowlight\LightService\Organizer;
+
+class {{ class }} extends Organizer
+{
+    /**
+     * List the actions this organizer will run in order.
+     *
+     * @return array<class-string>
+     */
+    public static function actions(): array
+    {
+        return [
+
+        ];
+    }
+}

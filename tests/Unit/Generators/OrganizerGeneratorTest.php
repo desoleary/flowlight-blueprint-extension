@@ -8,12 +8,24 @@ use Illuminate\Filesystem\Filesystem;
 use Mockery;
 
 beforeEach(function () {
-    $this->filesystem = Mockery::mock(Filesystem::class);
-    $this->generator = new OrganizerGenerator($this->filesystem);
+    $this->files = Mockery::mock(Filesystem::class);
+
+    $this->generator = Mockery::mock(OrganizerGenerator::class, [$this->files])
+        ->makePartial()
+        ->shouldAllowMockingProtectedMethods();
+
+    // Ensure safe file operations
+    $this->files->shouldReceive('makeDirectory')->andReturnTrue();
+    $this->files->shouldReceive('put')->andReturnTrue();
+
+    // Force consistent path for generated file
+    $this->generator->shouldReceive('getPath')
+        ->andReturn(sys_get_temp_dir().'/flowlight_test_app/UserOrganizer.php');
 });
 
 afterEach(function () {
     Mockery::close();
+    exec('rm -rf '.escapeshellarg(sys_get_temp_dir().'/flowlight_test_app'));
 });
 
 describe('OrganizerGenerator', function () {
@@ -24,47 +36,52 @@ describe('OrganizerGenerator', function () {
     });
 
     describe('output', function () {
-        it('returns empty array when no models exist', function () {
-            $tree = Mockery::mock(Tree::class);
-            $tree->shouldReceive('models')->andReturn([]);
+        it('returns empty created list when no api definitions exist', function () {
+            $tree = new Tree([]);
 
-            $output = $this->generator->output($tree);
+            $output = $this->generator->output($tree, 'class {{ class }} {}');
 
-            expect($output)->toBeEmpty();
+            expect($output)->toBe(['created' => []]);
         });
 
-        it('returns empty array when no models should generate organizers', function () {
-            $tree = Mockery::mock(Tree::class);
-            $tree->shouldReceive('models')->andReturn([
-                'User' => ['organizers' => false],
+        it('skips entities without organizers flag', function () {
+            $tree = new Tree([
+                'api' => [
+                    'User' => [
+                        'fields' => ['name' => ['type' => 'string']],
+                    ],
+                ],
             ]);
 
-            $output = $this->generator->output($tree);
+            $output = $this->generator->output($tree, 'class {{ class }} {}');
 
-            expect($output)->toEqual([]);
+            expect($output)->toBe(['created' => []]);
         });
 
-        it('generates organizer info for models that should generate organizers', function () {
-            $tree = Mockery::mock(Tree::class);
-            $tree->shouldReceive('models')->andReturn([
-                'User' => ['organizers' => true],
+        it('generates organizer file when organizers flag is true', function () {
+            $stub = <<<'PHP'
+<?php
+
+namespace {{ namespace }};
+
+class {{ class }}
+{
+}
+PHP;
+
+            $tree = new Tree([
+                'api' => [
+                    'User' => [
+                        'fields' => ['name' => ['type' => 'string']],
+                        'organizers' => true,
+                    ],
+                ],
             ]);
 
-            $output = $this->generator->output($tree);
+            $output = $this->generator->output($tree, $stub);
 
-            expect($output)->toHaveKey('User');
-            expect($output['User'])->toContain('Organizers for User would be generated here.');
-        });
-
-        it('skips models without organizers config', function () {
-            $tree = Mockery::mock(Tree::class);
-            $tree->shouldReceive('models')->andReturn([
-                'User' => ['fields' => ['name' => ['type' => 'string']]],
-            ]);
-
-            $output = $this->generator->output($tree);
-
-            expect($output)->toEqual([]);
+            expect($output['created'])->not->toBeEmpty();
+            expect($output['created'][0])->toEndWith('UserOrganizer.php');
         });
     });
 });

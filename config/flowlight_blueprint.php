@@ -1,6 +1,24 @@
 <?php
 
+use Flowlight\Generator\Generators\DtoGenerator;
+use Flowlight\Generator\Generators\OrganizerGenerator;
+
 return [
+    /*
+    |--------------------------------------------------------------------------
+    | Registered API Generators
+    |--------------------------------------------------------------------------
+    | List the generator classes that ApiGenerator should delegate to.
+    | You can add/remove generators here to customize API scaffolding.
+    */
+    'generators' => [
+        'dto' => DtoGenerator::class,
+        'organizer' => OrganizerGenerator::class,
+    ],
+    'stubs' => [
+        'dto' => 'dto.stub',
+        'organizer' => 'organizer.stub',
+    ],
     'field_types' => [
         'string' => [
             'db_type' => 'string',

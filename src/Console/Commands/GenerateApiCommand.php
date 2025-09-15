@@ -5,7 +5,6 @@ namespace Flowlight\Generator\Console\Commands;
 use Blueprint\Blueprint;
 use Blueprint\Tree;
 use Illuminate\Console\Command;
-use Symfony\Component\Yaml\Yaml;
 
 /**
  * Artisan command for generating API components (DTOs and Organizers).
@@ -68,17 +67,25 @@ class GenerateApiCommand extends Command
 
         $yamlConfig = $this->buildYamlConfig($entity, $fields);
 
-        /** @var array<string,mixed> $parsed */
-        $parsed = Yaml::parse($yamlConfig);
+        $tempFile = tempnam(sys_get_temp_dir(), 'blueprint_').'.yaml';
+        file_put_contents($tempFile, $yamlConfig);
+
+        $content = file_get_contents($tempFile);
 
         /** @var Tree $tree */
-        $tree = $blueprint->parse($parsed);
+        $parsed = $blueprint->parse($content);
 
+        $tree = new Tree($parsed);
+
+        /** @var array<string, list<string>> $generated */
         $generated = $blueprint->generate($tree);
 
-        foreach ($generated as $file => $content) {
+        foreach ($generated['created'] ?? [] as $file) {
+            /** @var string $file */
             $this->info("Generated: {$file}");
         }
+
+        unlink($tempFile);
 
         return Command::SUCCESS;
     }

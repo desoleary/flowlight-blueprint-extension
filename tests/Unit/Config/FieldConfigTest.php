@@ -1,10 +1,9 @@
 <?php
 
 use Flowlight\Generator\Config\FieldConfig;
-use Illuminate\Support\Facades\Config;
 
 beforeEach(function () {
-    Config::set('flowlight.field_types', [
+    config()->set('flowlight.field_types', [
         'string' => ['default_rules' => ['string']],
         'text' => ['default_rules' => ['string']],
         'email' => ['default_rules' => ['string', 'email']],

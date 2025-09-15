@@ -3,10 +3,7 @@
 namespace Tests\Unit\Providers;
 
 use Blueprint\Blueprint;
-use Flowlight\Generator\Generators\DtoGenerator;
-use Flowlight\Generator\Generators\OrganizerGenerator;
 use Flowlight\Generator\Providers\FlowlightServiceProvider;
-use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Application as LaravelApp;
@@ -47,21 +44,19 @@ describe('FlowlightServiceProvider', function () {
     it('merges configuration on register', function () {
         $this->provider->register();
 
-        $path = realpath(__DIR__.'/../../../config/field-types.php');
+        $path = realpath(__DIR__.'/../../../config/flowlight_blueprint.php');
         expect($path)->not->toBeFalse();
     });
 
-    it('registers generators into Blueprint on boot', function () {
+    it('registers ApiGenerator into Blueprint on register', function () {
         $blueprint = $this->app->make(Blueprint::class);
 
         $spy = Mockery::spy($blueprint);
         $this->app->instance(Blueprint::class, $spy);
 
-        $this->provider->boot();
+        $this->provider->register();
 
         $spy->shouldHaveReceived('registerGenerator')
-            ->with(Mockery::type(DtoGenerator::class));
-        $spy->shouldHaveReceived('registerGenerator')
-            ->with(Mockery::type(OrganizerGenerator::class));
+            ->with(Mockery::type(\Flowlight\Generator\Generators\ApiGenerator::class));
     });
 });

@@ -7,9 +7,13 @@ use Pest\Expectation;
 use PHPUnit\Framework\Assert;
 use SebastianBergmann\Diff\Differ;
 use SebastianBergmann\Diff\Output\UnifiedDiffOutputBuilder;
+use Tests\TestCase;
 
 require_once __DIR__.'/../vendor/autoload.php';
 require __DIR__.'/bootstrap.php';
+require __DIR__.'/TestCase.php';
+
+uses(TestCase::class)->in('Unit', 'Feature');
 
 /*
 |--------------------------------------------------------------------------
