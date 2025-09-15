@@ -5,6 +5,17 @@ namespace Flowlight\Generator\Config;
 use Illuminate\Support\Str;
 
 /**
+ * Field configuration container for Flowlight DTO generation.
+ *
+ * This class holds configuration metadata for a single field
+ * within a DTO, including its type, validation rules, messages,
+ * and presentation details (e.g., attribute label).
+ *
+ * It provides defaults for type (`string`), required state (`true`),
+ * and humanized labels (based on the field name). Validation rules
+ * and messages can be overridden or automatically generated based
+ * on configuration and conventions.
+ *
  * @phpstan-type FieldConfigArray array{
  *     type?: string,
  *     required?: bool,
@@ -16,13 +27,31 @@ use Illuminate\Support\Str;
  */
 class FieldConfig
 {
+    /**
+     * The field name (typically corresponds to the model/DTO property).
+     */
     protected string $name;
 
-    /** @var FieldConfigArray */
+    /**
+     * Raw configuration for this field.
+     *
+     * Keys can include:
+     * - `type`      (string)  : Field type, e.g. "string", "integer".
+     * - `required`  (bool)    : Whether the field is required.
+     * - `length`    (int)     : Maximum length (applies to string/text).
+     * - `attribute` (string)  : Custom human-readable label.
+     * - `rules`     (string[]) : Explicit validation rules.
+     * - `messages`  (array<string,string>) : Custom error messages.
+     *
+     * @var FieldConfigArray
+     */
     protected array $config;
 
     /**
-     * @param  FieldConfigArray  $config
+     * Create a new field configuration.
+     *
+     * @param  string  $name  The field name (e.g., "email").
+     * @param  FieldConfigArray  $config  The raw configuration array.
      */
     public function __construct(string $name, array $config)
     {
@@ -30,11 +59,23 @@ class FieldConfig
         $this->config = $config;
     }
 
+    /**
+     * Get the field name.
+     *
+     * @return string The configured field name.
+     */
     public function getName(): string
     {
         return $this->name;
     }
 
+    /**
+     * Get the field type.
+     *
+     * Defaults to `"string"` if not specified.
+     *
+     * @return string The field type.
+     */
     public function getType(): string
     {
         /** @var string|null $type */
@@ -43,6 +84,13 @@ class FieldConfig
         return $type ?? 'string';
     }
 
+    /**
+     * Determine whether the field is required.
+     *
+     * Defaults to `true` if not specified.
+     *
+     * @return bool True if required, false otherwise.
+     */
     public function isRequired(): bool
     {
         /** @var bool|null $req */
@@ -51,6 +99,13 @@ class FieldConfig
         return $req ?? true;
     }
 
+    /**
+     * Get the maximum length for the field.
+     *
+     * Typically used with string/text types to enforce a "max" rule.
+     *
+     * @return int|null The maximum length, or null if not set.
+     */
     public function getLength(): ?int
     {
         /** @var int|null $len */
@@ -59,6 +114,14 @@ class FieldConfig
         return $len;
     }
 
+    /**
+     * Get the human-readable attribute label.
+     *
+     * - Defaults to a title-cased version of the field name with underscores replaced by spaces.
+     * - Can be overridden via the `attribute` key in config.
+     *
+     * @return string Attribute label.
+     */
     public function getAttributeLabel(): string
     {
         /** @var string|null $attr */
@@ -68,7 +131,16 @@ class FieldConfig
     }
 
     /**
-     * @return list<string>
+     * Get the validation rules for this field.
+     *
+     * Rule resolution order:
+     * 1. Use explicitly provided `rules` if present.
+     * 2. Otherwise, pull default rules from `config('flowlight.field_types')` by type.
+     * 3. Ensure `required` or `sometimes` is applied depending on `isRequired()`.
+     * 4. Append `max:{length}` if applicable (for string/text fields with a length).
+     * 5. Ensure uniqueness of rules.
+     *
+     * @return list<string> A list of validation rule strings.
      */
     public function getRules(): array
     {
@@ -99,7 +171,13 @@ class FieldConfig
     }
 
     /**
-     * @return array<string,string>
+     * Get the validation messages for this field.
+     *
+     * - Uses explicitly provided messages if available.
+     * - Otherwise, generates default messages for each validation rule.
+     * - Ensures every rule has an associated message.
+     *
+     * @return array<string,string> Map of rule keys to error messages.
      */
     public function getMessages(): array
     {
@@ -116,11 +194,28 @@ class FieldConfig
         return $messages;
     }
 
+    /**
+     * Extract the rule key from a validation rule string.
+     *
+     * Examples:
+     * - `"max:255"` → `"max"`
+     * - `"string"`  → `"string"`
+     *
+     * @param  string  $rule  The validation rule.
+     * @return string The rule key.
+     */
     protected function getRuleKey(string $rule): string
     {
         return Str::contains($rule, ':') ? Str::before($rule, ':') : $rule;
     }
 
+    /**
+     * Generate a default validation message for a given rule.
+     *
+     * @param  string  $ruleKey  The key of the rule (e.g., "required", "max").
+     * @param  string  $fullRule  The full validation rule string.
+     * @return string Human-readable validation message.
+     */
     protected function generateDefaultMessage(string $ruleKey, string $fullRule): string
     {
         $label = $this->getAttributeLabel();
@@ -140,6 +235,13 @@ class FieldConfig
         };
     }
 
+    /**
+     * Generate a default "max" validation message.
+     *
+     * @param  string  $rule  Full rule string, e.g. "max:255".
+     * @param  string  $label  Field label.
+     * @return string Error message.
+     */
     protected function generateMaxMessage(string $rule, string $label): string
     {
         $value = Str::after($rule, ':');
@@ -147,6 +249,13 @@ class FieldConfig
         return "{$label} cannot exceed {$value}.";
     }
 
+    /**
+     * Generate a default "min" validation message.
+     *
+     * @param  string  $rule  Full rule string, e.g. "min:3".
+     * @param  string  $label  Field label.
+     * @return string Error message.
+     */
     protected function generateMinMessage(string $rule, string $label): string
     {
         $value = Str::after($rule, ':');
@@ -154,6 +263,13 @@ class FieldConfig
         return "{$label} must be at least {$value}.";
     }
 
+    /**
+     * Generate a default "in" validation message.
+     *
+     * @param  string  $rule  Full rule string, e.g. "in:admin,user".
+     * @param  string  $label  Field label.
+     * @return string Error message.
+     */
     protected function generateInMessage(string $rule, string $label): string
     {
         $values = Str::after($rule, ':');

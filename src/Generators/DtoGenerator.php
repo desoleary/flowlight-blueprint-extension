@@ -8,18 +8,31 @@ use Flowlight\Generator\Config\ModelConfigWrapper;
 use Illuminate\Filesystem\Filesystem;
 
 /**
- * @phpstan-import-type ModelConfigArray from ModelConfigWrapper
+ * DTO Generator for Flowlight API scaffolding.
+ *
+ * Implements Blueprint's {@see Generator} contract to generate DTO
+ * (Data Transfer Object) classes for API models based on the parsed
+ * Blueprint tree. It uses `ModelConfigWrapper` for normalized access
+ * to model, field, and DTO configuration.
  */
 class DtoGenerator implements Generator
 {
+    /**
+     * Filesystem instance used for reading stubs and writing DTO files.
+     */
     protected Filesystem $filesystem;
 
+    /**
+     * Create a new DTO generator.
+     */
     public function __construct(Filesystem $filesystem)
     {
         $this->filesystem = $filesystem;
     }
 
     /**
+     * Get the generator types this class handles.
+     *
      * @return list<string>
      */
     public function types(): array
@@ -28,17 +41,32 @@ class DtoGenerator implements Generator
     }
 
     /**
-     * @return array<string,string> modelName => generated path
+     * Generate DTOs for models in the parsed Blueprint tree.
+     *
+     * @return array<string,string> Map of model name => generated DTO file path.
      */
     public function output(Tree $tree): array
     {
         $output = [];
 
-        /** @var array<string, ModelConfigArray> $models */
+        /**
+         * @var array<string, array{
+         *     table?: string,
+         *     fields?: array<string, array{
+         *         type?: string,
+         *         required?: bool,
+         *         length?: int,
+         *         attribute?: string,
+         *         rules?: list<string>,
+         *         messages?: array<string, string>
+         *     }>,
+         *     dto?: array<string, mixed>|true,
+         *     organizers?: array<string, bool>|bool
+         * }> $models
+         */
         $models = $tree->models();
 
         foreach ($models as $modelName => $modelConfig) {
-            // @phpstan-var ModelConfigArray $modelConfig
             $wrapper = new ModelConfigWrapper($modelName, $modelConfig);
 
             if ($wrapper->shouldGenerateDto()) {
@@ -50,14 +78,13 @@ class DtoGenerator implements Generator
     }
 
     /**
-     * Generate a DTO file and return the path.
+     * Generate a DTO file for the given model.
      */
-    protected function generateDto(ModelConfigWrapper $wrapper): string
+    public function generateDto(ModelConfigWrapper $wrapper): string
     {
         $dtoConfig = $wrapper->getDtoConfig();
         $stub = $this->filesystem->get(__DIR__.'/../stubs/dto.stub');
 
-        /** @var array<string,string> $replacements */
         $replacements = [
             '{{ namespace }}' => $dtoConfig->getNamespace(),
             '{{ class }}' => $dtoConfig->getClassName(),
@@ -77,14 +104,20 @@ class DtoGenerator implements Generator
         return $path;
     }
 
-    protected function generateAttributes(ModelConfigWrapper $wrapper): string
+    /**
+     * Generate the `$attributes` array for the DTO.
+     */
+    public function generateAttributes(ModelConfigWrapper $wrapper): string
     {
         return $wrapper->getFields()
             ->map(fn ($field) => "        '{$field->getName()}' => '{$field->getAttributeLabel()}',")
             ->implode("\n");
     }
 
-    protected function generateMessages(ModelConfigWrapper $wrapper): string
+    /**
+     * Generate the `$messages` array for the DTO.
+     */
+    public function generateMessages(ModelConfigWrapper $wrapper): string
     {
         $messages = [];
 
@@ -101,7 +134,10 @@ class DtoGenerator implements Generator
         return implode("\n", $messages);
     }
 
-    protected function generateRules(ModelConfigWrapper $wrapper): string
+    /**
+     * Generate the `$rules` array for the DTO.
+     */
+    public function generateRules(ModelConfigWrapper $wrapper): string
     {
         return $wrapper->getFields()
             ->map(function ($field) {
@@ -115,7 +151,10 @@ class DtoGenerator implements Generator
             ->implode("\n");
     }
 
-    protected function getPath(string $namespace, string $className): string
+    /**
+     * Resolve the file path for the generated DTO.
+     */
+    public function getPath(string $namespace, string $className): string
     {
         $path = str_replace('App\\', 'app/', $namespace);
         $path = str_replace('\\', '/', $path);

@@ -2,109 +2,49 @@
 
 declare(strict_types=1);
 
-use Illuminate\Config\Repository;
-use Illuminate\Container\Container;
-use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Facade;
-use Illuminate\Translation\ArrayLoader;
-use Illuminate\Translation\Translator;
-use Illuminate\Validation\Factory as ValidatorFactory;
 use Pest\Expectation;
 use PHPUnit\Framework\Assert;
 use SebastianBergmann\Diff\Differ;
 use SebastianBergmann\Diff\Output\UnifiedDiffOutputBuilder;
 
 require_once __DIR__.'/../vendor/autoload.php';
+require __DIR__.'/bootstrap.php';
 
 /*
 |--------------------------------------------------------------------------
-| Minimal Laravel-like Container + Helpers
+| Expectations
 |--------------------------------------------------------------------------
-*/
-$container = new Container;
-Container::setInstance($container);
-
-// Cast to Application contract for type checkers
-/** @var Application $app */
-$app = $container;
-
-Facade::setFacadeApplication($app);
-
-$configRepo = new Repository([
-    'data' => [
-        'max_transformation_depth' => 64,
-        'throw_when_max_transformation_depth_reached' => false,
-        'date_format' => 'Y-m-d\TH:i:sP',
-        'casts' => [],
-        'transformers' => [],
-        'wrap' => null,
-        'enabled_casters' => [],
-    ],
-]);
-$container->instance('config', $configRepo);
-
-$translator = new Translator(new ArrayLoader, 'en');
-$validatorFactory = new ValidatorFactory($translator);
-
-$container->instance(ValidatorFactory::class, $validatorFactory);
-$container->instance('validator', $validatorFactory);
-
-// global helpers
-if (! function_exists('app')) {
-    function app(?string $abstract = null, array $parameters = [])
-    {
-        $container = Container::getInstance();
-
-        return $abstract === null
-            ? $container
-            : $container->make($abstract, $parameters);
-    }
-}
-
-if (! function_exists('config')) {
-    function config($key = null, $default = null)
-    {
-        /** @var Repository $repo */
-        $repo = app('config');
-
-        if ($key === null) {
-            return $repo;
-        }
-
-        if (is_array($key)) {
-            foreach ($key as $k => $v) {
-                $repo->set($k, $v);
-            }
-
-            return true;
-        }
-
-        return $repo->get($key, $default);
-    }
-}
-
-if (! function_exists('validator')) {
-    function validator(array $data = [], array $rules = [], array $messages = [], array $attributes = [])
-    {
-        /** @var ValidatorFactory $vf */
-        $vf = app(ValidatorFactory::class);
-
-        return $vf->make($data, $rules, $messages, $attributes);
-    }
-}
-
-/*
-|--------------------------------------------------------------------------
-| Custom Pest Expectations
-|--------------------------------------------------------------------------
+|
+| Custom extensions to Pest's expectation API for better diffs.
+|
 */
 
-expect()->extend('toBeOne', function () {
-    return $this->toBe(1);
-});
+/**
+ * Helper to pretty print PHP arrays in short syntax ([ ]).
+ */
+$pretty = static function ($v): string {
+    if (is_array($v)) {
+        if ($v === []) {
+            return '[]';
+        }
 
-expect()->extend('toEqualDiff', function ($expected): Expectation {
+        $exported = var_export($v, true);
+
+        // Convert array(...) to [...]
+        $exported = preg_replace('/^array \(/m', '[', $exported);
+        $exported = preg_replace('/\)(,?)$/m', ']$1', $exported);
+
+        return $exported;
+    }
+
+    return var_export($v, true);
+};
+
+/**
+ * expect($actual)->toEqualDiff($expected)
+ */
+expect()->extend('toEqualDiff', function ($expected) use ($pretty): Expectation {
     $normalize = static function ($v) {
         if ($v instanceof Collection) {
             return $v->toArray();
@@ -119,35 +59,106 @@ expect()->extend('toEqualDiff', function ($expected): Expectation {
     $actualNorm = $normalize($this->value);
     $expectedNorm = $normalize($expected);
 
-    if (! is_array($actualNorm) || ! is_array($expectedNorm)) {
+    $isArrayLike = is_array($actualNorm) && is_array($expectedNorm);
+
+    if (! $isArrayLike) {
         Assert::assertEquals($expected, $this->value);
 
         return $this;
     }
 
     if ($actualNorm === $expectedNorm) {
-        Assert::assertSame(
-            json_encode($expectedNorm, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            json_encode($actualNorm, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-        );
+        Assert::assertSame($expectedNorm, $actualNorm);
 
         return $this;
     }
 
-    $pretty = static fn ($v) => json_encode($v, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    $builder = new UnifiedDiffOutputBuilder("--- Expected\n+++ Actual\n");
-    $diff = (new Differ($builder))->diff($pretty($expectedNorm), $pretty($actualNorm));
+    $expectedStr = $pretty($expectedNorm);
+    $actualStr = $pretty($actualNorm);
 
-    Assert::fail("Diff:\n{$diff}");
+    $builder = new UnifiedDiffOutputBuilder("--- Expected\n+++ Actual\n");
+    $differ = new Differ($builder);
+    $diff = $differ->diff($expectedStr, $actualStr);
+
+    $green = "\033[32m";
+    $red = "\033[31m";
+    $reset = "\033[0m";
+
+    $message = <<<MSG
+{$green}Expected: {$expectedStr}{$reset}
+
+{$red}Actual: {$actualStr}{$reset}
+
+Diff:
+{$diff}
+MSG;
+
+    Assert::fail($message);
 });
 
-/*
-|--------------------------------------------------------------------------
-| Test Case Binding (optional)
-|--------------------------------------------------------------------------
-|
-| If you want to bind Feature tests to a base TestCase class:
-|
-| uses(Tests\TestCase::class)->in('Feature');
-|
-*/
+/**
+ * Intercept `toEqual` for array/collection values.
+ */
+expect()->intercept(
+    'toEqual',
+    function ($value, $expected): bool {
+        $norm = static function ($v) {
+            if ($v instanceof Collection) {
+                return $v->toArray();
+            }
+            if ($v instanceof Traversable) {
+                return iterator_to_array($v);
+            }
+
+            return $v;
+        };
+
+        $a = $norm($value);
+        $e = $norm($expected);
+
+        return is_array($a) && is_array($e);
+    },
+    function ($expected) use ($pretty): void {
+        $normalize = static function ($v) {
+            if ($v instanceof Collection) {
+                return $v->toArray();
+            }
+            if ($v instanceof Traversable) {
+                return iterator_to_array($v);
+            }
+
+            return $v;
+        };
+
+        $actualNorm = $normalize($this->value);
+        $expectedNorm = $normalize($expected);
+
+        if ($actualNorm === $expectedNorm) {
+            Assert::assertSame($expectedNorm, $actualNorm);
+
+            return;
+        }
+
+        $expectedStr = $pretty($expectedNorm);
+        $actualStr = $pretty($actualNorm);
+
+        $builder = new UnifiedDiffOutputBuilder("--- Expected\n+++ Actual\n");
+        $differ = new Differ($builder);
+        $diff = $differ->diff($expectedStr, $actualStr);
+
+        $green = "\033[32m";
+        $red = "\033[31m";
+        $reset = "\033[0m";
+
+        $message = <<<MSG
+{$green}Expected: {$expectedStr}{$reset}
+
+{$red}Actual: {$actualStr}{$reset}
+
+Diff:
+{$diff}
+MSG;
+
+        Assert::fail($message);
+    }
+);
