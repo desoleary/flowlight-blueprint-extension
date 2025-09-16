@@ -72,7 +72,7 @@ class GenerateApiCommand extends Command
 
         $content = file_get_contents($tempFile);
 
-        /** @var Tree $tree */
+        /** @var array<string,mixed> $parsed */
         $parsed = $blueprint->parse($content);
 
         $tree = new Tree($parsed);

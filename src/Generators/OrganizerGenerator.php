@@ -2,6 +2,7 @@
 
 namespace Flowlight\Generator\Generators;
 
+use Flowlight\Generator\Config\ModelConfigWrapper;
 use Illuminate\Filesystem\Filesystem;
 
 /**
@@ -15,22 +16,27 @@ class OrganizerGenerator extends PluggableGenerator
     public function __construct(Filesystem $files)
     {
         parent::__construct($files, [
-            'key' => 'organizers',
-            'namespace' => 'App\\Domain\\{{entity}}s\\Organizers',
+            'key' => 'organizer',
+            'namespace' => 'App\\Domain\\{{modelName}}s\\Organizers',
             'suffix' => 'Organizer',
         ]);
     }
 
     public function populateStub(
         string $stub,
-        string $entity,
+        string $modelName,
         string $namespace,
         string $className,
-        array $definition
+        ?string $extends,
+        ModelConfigWrapper $model
     ): string {
         return str_replace(
-            ['{{ namespace }}', '{{ class }}'],
-            [$namespace, $className],
+            ['{{ namespace }}', '{{ class }}', '{{ extends }}'],
+            [
+                $namespace,
+                $className,
+                $extends ? "extends {$extends}" : '',
+            ],
             $stub
         );
     }

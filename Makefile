@@ -33,7 +33,7 @@ CS_PARAMS        ?=              # Extra params for Pint
 
 # ---- Paths
 COVERAGE_DIR  := coverage-html   # Coverage HTML output
-COVERAGE_XML  := coverage.xml    # Coverage XML output (e.g. for CI tools)
+COVERAGE_XML  := coverage/coverage.xml    # Coverage XML output (e.g. for CI tools)
 
 .PHONY: help install test coverage coverage-show lint static static-phpstan \
         static-phpstan-update-baseline static-codestyle-fix static-codestyle-check \

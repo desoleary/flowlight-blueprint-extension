@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Generators;
 
-use Blueprint\Tree;
+use Flowlight\Generator\Config\OrganizerConfig;
 use Flowlight\Generator\Generators\OrganizerGenerator;
 use Illuminate\Filesystem\Filesystem;
 use Mockery;
@@ -36,24 +36,23 @@ describe('OrganizerGenerator', function () {
     });
 
     describe('output', function () {
-        it('returns empty created list when no api definitions exist', function () {
-            $tree = new Tree([]);
+        it('returns empty created list when organizers not defined', function () {
+            $model = new OrganizerConfig('User', [
+                'fields' => ['name' => ['type' => 'string']],
+            ], 'organizers');
 
-            $output = $this->generator->output($tree, 'class {{ class }} {}');
+            $output = $this->generator->output($model, 'class {{ class }} {}');
 
             expect($output)->toBe(['created' => []]);
         });
 
-        it('skips entities without organizers flag', function () {
-            $tree = new Tree([
-                'api' => [
-                    'User' => [
-                        'fields' => ['name' => ['type' => 'string']],
-                    ],
-                ],
-            ]);
+        it('returns empty created list when organizers is false', function () {
+            $model = new OrganizerConfig('User', [
+                'fields' => ['name' => ['type' => 'string']],
+                'organizers' => false,
+            ], 'organizers');
 
-            $output = $this->generator->output($tree, 'class {{ class }} {}');
+            $output = $this->generator->output($model, 'class {{ class }} {}');
 
             expect($output)->toBe(['created' => []]);
         });
@@ -69,16 +68,12 @@ class {{ class }}
 }
 PHP;
 
-            $tree = new Tree([
-                'api' => [
-                    'User' => [
-                        'fields' => ['name' => ['type' => 'string']],
-                        'organizers' => true,
-                    ],
-                ],
-            ]);
+            $model = new OrganizerConfig('User', [
+                'fields' => ['name' => ['type' => 'string']],
+                'organizers' => true,
+            ], 'organizers');
 
-            $output = $this->generator->output($tree, $stub);
+            $output = $this->generator->output($model, $stub);
 
             expect($output['created'])->not->toBeEmpty();
             expect($output['created'][0])->toEndWith('UserOrganizer.php');

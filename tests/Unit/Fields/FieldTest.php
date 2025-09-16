@@ -1,6 +1,6 @@
 <?php
 
-use Flowlight\Generator\Config\FieldConfig;
+use Flowlight\Generator\Fields\Field;
 
 beforeEach(function () {
     config()->set('flowlight.field_types', [
@@ -16,62 +16,62 @@ beforeEach(function () {
 
 describe('getName', function () {
     it('returns the provided name', function () {
-        $f = new FieldConfig('first_name', ['type' => 'string']);
+        $f = new Field('first_name', ['type' => 'string']);
         expect($f->getName())->toBe('first_name');
     });
 });
 
 describe('getType', function () {
     it('returns configured type', function () {
-        $f = new FieldConfig('email', ['type' => 'email']);
+        $f = new Field('email', ['type' => 'email']);
         expect($f->getType())->toBe('email');
     });
 
     it('defaults to string when not provided', function () {
-        $f = new FieldConfig('anything', []);
+        $f = new Field('anything', []);
         expect($f->getType())->toBe('string');
     });
 });
 
 describe('isRequired', function () {
     it('defaults to true', function () {
-        $f = new FieldConfig('x', []);
+        $f = new Field('x', []);
         expect($f->isRequired())->toBeTrue();
     });
 
     it('respects explicit false', function () {
-        $f = new FieldConfig('x', ['required' => false]);
+        $f = new Field('x', ['required' => false]);
         expect($f->isRequired())->toBeFalse();
     });
 });
 
 describe('getLength', function () {
     it('returns configured length', function () {
-        $f = new FieldConfig('title', ['length' => 64]);
+        $f = new Field('title', ['length' => 64]);
         expect($f->getLength())->toBe(64);
     });
 
     it('returns null when not set', function () {
-        $f = new FieldConfig('title', []);
+        $f = new Field('title', []);
         expect($f->getLength())->toBeNull();
     });
 });
 
 describe('getAttributeLabel', function () {
     it('returns explicit attribute label', function () {
-        $f = new FieldConfig('email', ['attribute' => 'Email Address']);
+        $f = new Field('email', ['attribute' => 'Email Address']);
         expect($f->getAttributeLabel())->toBe('Email Address');
     });
 
     it('generates a title-cased label from snake_case', function () {
-        $f = new FieldConfig('first_name', []);
+        $f = new Field('first_name', []);
         expect($f->getAttributeLabel())->toBe('First Name');
     });
 });
 
 describe('getRules', function () {
     it('uses explicit rules and does not add required when nullable present', function () {
-        $f = new FieldConfig('name', [
+        $f = new Field('name', [
             'type' => 'string',
             'length' => 32,
             'rules' => ['nullable', 'string'],
@@ -82,7 +82,7 @@ describe('getRules', function () {
     });
 
     it('merges default type rules when none provided and adds required', function () {
-        $f = new FieldConfig('email', [
+        $f = new Field('email', [
             'type' => 'email',
             'required' => true,
         ]);
@@ -91,7 +91,7 @@ describe('getRules', function () {
     });
 
     it('adds sometimes for optional fields and length for string/text only', function () {
-        $f = new FieldConfig('title', [
+        $f = new Field('title', [
             'type' => 'string',
             'length' => 10,
             'required' => false,
@@ -101,7 +101,7 @@ describe('getRules', function () {
     });
 
     it('does not add max:length for non-string types', function () {
-        $f = new FieldConfig('age', [
+        $f = new Field('age', [
             'type' => 'integer',
             'length' => 10,
             'required' => true,
@@ -111,7 +111,7 @@ describe('getRules', function () {
     });
 
     it('does not duplicate sometimes if already present', function () {
-        $f = new FieldConfig('nickname', [
+        $f = new Field('nickname', [
             'type' => 'string',
             'rules' => ['sometimes', 'string'],
             'required' => false,
@@ -121,7 +121,7 @@ describe('getRules', function () {
     });
 
     it('deduplicates duplicate explicit rules and keeps a single required at front', function () {
-        $f = new FieldConfig('email', [
+        $f = new Field('email', [
             'type' => 'email',
             'rules' => ['required', 'required', 'email', 'email'],
             'required' => true,
@@ -133,7 +133,7 @@ describe('getRules', function () {
 
 describe('getMessages', function () {
     it('generates default messages for all known rules and a sensible default for unknown', function () {
-        $f = new FieldConfig('first_name', [
+        $f = new Field('first_name', [
             'attribute' => 'First Name',
             'rules' => [
                 'required',
@@ -168,7 +168,7 @@ describe('getMessages', function () {
     });
 
     it('respects user-provided message overrides', function () {
-        $f = new FieldConfig('email', [
+        $f = new Field('email', [
             'attribute' => 'Email',
             'rules' => ['required', 'max:10', 'email'],
             'messages' => [
@@ -185,7 +185,7 @@ describe('getMessages', function () {
     });
 
     it('auto-generates messages for rules added by getRules (e.g., required/sometimes, max:length)', function () {
-        $f = new FieldConfig('display_name', [
+        $f = new Field('display_name', [
             'type' => 'string',
             'length' => 12,
             'required' => false,
@@ -201,5 +201,32 @@ describe('getMessages', function () {
         expect($messages['max'])->toBe('Display Name cannot exceed 12.');
         expect($messages['string'])->toBe('Display Name must be text.');
         expect($messages['sometimes'])->toBe('Validation failed for Display Name.');
+    });
+});
+
+describe('toArray', function () {
+    it('returns the raw config array', function () {
+        $config = [
+            'type' => 'string',
+            'required' => false,
+            'length' => 42,
+            'attribute' => 'Custom Label',
+            'rules' => ['string', 'max:42'],
+            'messages' => ['max' => 'Too long.'],
+        ];
+
+        $f = new Field('custom_field', $config);
+
+        expect($f->toArray())->toBe($config);
+    });
+});
+
+describe('__construct (string shorthand)', function () {
+    it('normalizes shorthand string config into type array', function () {
+        $f = new Field('status', 'boolean');
+
+        expect($f->getType())->toBe('boolean');
+        expect($f->isRequired())->toBeTrue(); // defaults to true
+        expect($f->getAttributeLabel())->toBe('Status');
     });
 });

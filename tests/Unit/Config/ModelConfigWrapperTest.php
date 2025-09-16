@@ -1,138 +1,396 @@
 <?php
 
-use Flowlight\Generator\Config\DtoConfig;
-use Flowlight\Generator\Config\FieldConfig;
+namespace Tests\Unit\Config;
+
 use Flowlight\Generator\Config\ModelConfigWrapper;
+use Flowlight\Generator\Fields\Field;
+use Flowlight\Generator\Fields\FieldCollection;
 
-describe('ModelConfigWrapper', function () {
-    describe('getModelName', function () {
-        it('returns the model name', function () {
-            $wrapper = new ModelConfigWrapper('User', []);
-            expect($wrapper->getModelName())->toBe('User');
-        });
+beforeEach(function () {
+    $this->wrapper = new class('User', ['fields' => ['name' => ['type' => 'string', 'required' => true], 'age' => ['type' => 'int', 'required' => false]], 'dto' => ['namespace' => 'Custom\\Namespace', 'className' => 'CustomDto', 'extends' => 'BaseDto'], 'table' => 'custom_users'], 'dto') extends ModelConfigWrapper
+    {
+        protected function getDefaultNamespace(): string
+        {
+            return 'App\\Domain\\Users\\Data';
+        }
+
+        protected function getDefaultClassName(): string
+        {
+            return 'UserData';
+        }
+
+        protected function getDefaultExtendedClassName(): ?string
+        {
+            return 'Flowlight\\BaseData';
+        }
+    };
+});
+
+describe('getModelName', function () {
+    it('returns the model name', function () {
+        expect($this->wrapper->getModelName())->toBe('User');
+    });
+});
+
+describe('getType', function () {
+    it('returns the generator type', function () {
+        expect($this->wrapper->getType())->toBe('dto');
+    });
+});
+
+describe('getDefinition', function () {
+    it('returns the raw definition array', function () {
+        $def = $this->wrapper->getDefinition();
+        expect($def)->toBeArray()->toHaveKey('fields')->toHaveKey('dto');
+    });
+});
+
+describe('getFields', function () {
+    it('initializes fields as FieldConfig instances', function () {
+        $fields = $this->wrapper->getFields();
+        expect($fields)->toBeInstanceOf(FieldCollection::class);
+        expect($fields->get('name'))->toBeInstanceOf(Field::class);
+        expect($fields->get('age'))->toBeInstanceOf(Field::class);
     });
 
-    describe('getTableName', function () {
-        it('returns default table name when not overridden', function () {
-            $wrapper = new ModelConfigWrapper('User', []);
-            expect($wrapper->getTableName())->toBe('users');
-        });
+    it('when no fields defined it returns an empty FieldCollection', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
 
-        it('returns overridden table name when provided', function () {
-            $wrapper = new ModelConfigWrapper('User', ['table' => 'custom_users']);
-            expect($wrapper->getTableName())->toBe('custom_users');
-        });
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+
+        $fields = $wrapper->getFields();
+        expect($fields)->toBeInstanceOf(\Flowlight\Generator\Fields\FieldCollection::class);
+        expect($fields->count())->toBe(0);
+    });
+});
+
+describe('getField', function () {
+    it('returns a single field config by name', function () {
+        $field = $this->wrapper->getField('name');
+        expect($field)->toBeInstanceOf(Field::class);
+        expect($field->getName())->toBe('name');
     });
 
-    describe('shouldGenerateDto', function () {
-        it('returns true when dto config exists', function () {
-            $wrapper = new ModelConfigWrapper('User', ['dto' => true]);
-            expect($wrapper->shouldGenerateDto())->toBeTrue();
-        });
+    it('returns null for missing field', function () {
+        expect($this->wrapper->getField('missing'))->toBeNull();
+    });
+});
 
-        it('returns false when fields exist without dto config', function () {
-            $wrapper = new ModelConfigWrapper('User', [
-                'fields' => ['name' => ['type' => 'string']],
-            ]);
-            expect($wrapper->shouldGenerateDto())->toBeFalse();
-        });
+describe('shouldGenerate', function () {
+    it('returns true when type section is true', function () {
+        $wrapper = new class('User', ['dto' => true], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
 
-        it('returns false when no dto config or fields exist', function () {
-            $wrapper = new ModelConfigWrapper('User', []);
-            expect($wrapper->shouldGenerateDto())->toBeFalse();
-        });
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+        expect($wrapper->shouldGenerate())->toBeTrue();
     });
 
-    describe('getDtoConfig', function () {
-        it('returns a DtoConfig instance', function () {
-            $wrapper = new ModelConfigWrapper('User', ['dto' => true]);
-            expect($wrapper->getDtoConfig())->toBeInstanceOf(DtoConfig::class);
-        });
+    it('returns true when type section is non-empty array', function () {
+        $wrapper = new class('User', ['dto' => ['namespace' => 'X']], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
+
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+        expect($wrapper->shouldGenerate())->toBeTrue();
     });
 
-    describe('getFields', function () {
-        it('returns a collection of FieldConfig objects', function () {
-            $wrapper = new ModelConfigWrapper('User', [
-                'fields' => [
-                    'email' => ['type' => 'string', 'required' => true],
-                ],
-            ]);
+    it('returns false otherwise', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
 
-            $fields = $wrapper->getFields();
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
 
-            expect($fields)->toHaveCount(1)
-                ->and($fields->get('email'))->toBeInstanceOf(FieldConfig::class);
-        });
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+        expect($wrapper->shouldGenerate())->toBeFalse();
+    });
+});
 
-        it('returns an empty collection when no fields are configured', function () {
-            $wrapper = new ModelConfigWrapper('User', []);
-            expect($wrapper->getFields())->toHaveCount(0);
-        });
+describe('getNamespace', function () {
+    it('returns namespace from config when present', function () {
+        expect($this->wrapper->getNamespace())->toBe('Custom\\Namespace');
     });
 
-    describe('getField', function () {
-        it('returns a specific FieldConfig when it exists', function () {
-            $wrapper = new ModelConfigWrapper('User', [
-                'fields' => ['name' => ['type' => 'string']],
-            ]);
+    it('falls back to default namespace when not configured', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'Default\\NS';
+            }
 
-            expect($wrapper->getField('name'))->toBeInstanceOf(FieldConfig::class);
-        });
+            protected function getDefaultClassName(): string
+            {
+                return 'UserData';
+            }
 
-        it('returns null when the field does not exist', function () {
-            $wrapper = new ModelConfigWrapper('User', []);
-            expect($wrapper->getField('missing'))->toBeNull();
-        });
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+        expect($wrapper->getNamespace())->toBe('Default\\NS');
     });
 
-    describe('shouldGenerateOrganizers', function () {
-        it('returns true when organizers is true', function () {
-            $wrapper = new ModelConfigWrapper('User', ['organizers' => true]);
-            expect($wrapper->shouldGenerateOrganizers())->toBeTrue();
-        });
+    it('throws when fallback namespace is blank', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return '';
+            }
 
-        it('returns false when organizers is false', function () {
-            $wrapper = new ModelConfigWrapper('User', ['organizers' => false]);
-            expect($wrapper->shouldGenerateOrganizers())->toBeFalse();
-        });
+            protected function getDefaultClassName(): string
+            {
+                return 'UserData';
+            }
 
-        it('returns false when organizers key is missing', function () {
-            $wrapper = new ModelConfigWrapper('User', []);
-            expect($wrapper->shouldGenerateOrganizers())->toBeFalse();
-        });
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+        expect(fn () => $wrapper->getNamespace())->toThrow(\LogicException::class);
+    });
+});
+
+describe('getClassName', function () {
+    it('returns className from config when present', function () {
+        expect($this->wrapper->getClassName())->toBe('CustomDto');
     });
 
-    describe('getOrganizerTypes', function () {
-        it('returns default CRUD+list when organizers is true', function () {
-            $wrapper = new ModelConfigWrapper('User', ['organizers' => true]);
-            expect($wrapper->getOrganizerTypes())->toBe(['create', 'read', 'update', 'delete', 'list']);
-        });
+    it('falls back to default className when not configured', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
 
-        it('returns only enabled organizer types from array config', function () {
-            $wrapper = new ModelConfigWrapper('User', [
-                'organizers' => [
-                    'create' => true,
-                    'read' => false,
-                    'update' => true,
-                ],
-            ]);
+            protected function getDefaultClassName(): string
+            {
+                return 'Fallback';
+            }
 
-            expect($wrapper->getOrganizerTypes())->toBe(['create', 'update']);
-        });
-
-        it('returns empty array when organizers is false or missing', function () {
-            $wrapper1 = new ModelConfigWrapper('User', ['organizers' => false]);
-            $wrapper2 = new ModelConfigWrapper('User', []);
-
-            expect($wrapper1->getOrganizerTypes())->toBe([])
-                ->and($wrapper2->getOrganizerTypes())->toBe([]);
-        });
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+        expect($wrapper->getClassName())->toBe('Fallback');
     });
 
-    describe('getOrganizerConfig', function () {
-        it('returns an OrganizerConfig instance', function () {
-            $wrapper = new ModelConfigWrapper('User', ['organizers' => true]);
-            expect($wrapper->getOrganizerConfig())->toBeInstanceOf(\Flowlight\Generator\Config\OrganizerConfig::class);
-        });
+    it('throws when fallback className is blank', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
+
+            protected function getDefaultClassName(): string
+            {
+                return '';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+        expect(fn () => $wrapper->getClassName())->toThrow(\LogicException::class);
+    });
+});
+
+describe('getExtendedClassName', function () {
+    it('returns extended class from config when present', function () {
+        expect($this->wrapper->getExtendedClassName())->toBe('BaseDto');
+    });
+
+    it('falls back to default extended class when not configured', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
+
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'DefaultBase';
+            }
+        };
+        expect($wrapper->getExtendedClassName())->toBe('DefaultBase');
+    });
+
+    it('throws when fallback extended class is blank', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
+
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return '';
+            }
+        };
+        expect(fn () => $wrapper->getExtendedClassName())->toThrow(\LogicException::class);
+    });
+
+    it('throws when fallback extended class is null', function () {
+        $wrapper = new class('User', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
+
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return null;
+            }
+        };
+        expect(fn () => $wrapper->getExtendedClassName())->toThrow(\LogicException::class);
+    });
+});
+
+describe('getTableName', function () {
+    it('returns table name from config when provided', function () {
+        expect($this->wrapper->getTableName())->toBe('custom_users');
+    });
+
+    it('returns snake plural of model name by default', function () {
+        $wrapper = new class('Person', [], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
+
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return null;
+            }
+        };
+        expect(fn () => $wrapper->getExtendedClassName())->toThrow(\LogicException::class);
+    });
+
+    it('throws when configured table name is blank', function () {
+        $wrapper = new class('User', ['table' => ''], 'dto') extends ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
+
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return null;
+            }
+        };
+        expect(fn () => $wrapper->getTableName())->toThrow(\LogicException::class);
+    });
+
+    it('throws a LogicException if the table key is not set at all', function () {
+        $wrapper = new class('User', [], 'dto') extends \Flowlight\Generator\Config\ModelConfigWrapper
+        {
+            protected function getDefaultNamespace(): string
+            {
+                return 'NS';
+            }
+
+            protected function getDefaultClassName(): string
+            {
+                return 'X';
+            }
+
+            protected function getDefaultExtendedClassName(): ?string
+            {
+                return 'Base';
+            }
+        };
+
+        try {
+            $wrapper->getTableName();
+            $this->fail('Expected LogicException was not thrown');
+        } catch (\LogicException $e) {
+            expect($e->getMessage())->toContain('table name must be provided');
+        }
     });
 });

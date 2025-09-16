@@ -4,79 +4,78 @@ namespace Flowlight\Generator\Generators;
 
 use Blueprint\Contracts\Generator;
 use Blueprint\Tree;
+use Flowlight\Generator\Config\ModelConfigWrapper;
 use Illuminate\Filesystem\Filesystem;
+use RuntimeException;
 
-/**
- * Central API generator that delegates work to pluggable sub-generators
- * (e.g., DtoGenerator, OrganizerGenerator).
- *
- * Stub templates are resolved dynamically based on configuration:
- *
- * flowlight.generators:
- *   dto: Flowlight\Generator\Generators\DtoGenerator
- *   organizers: Flowlight\Generator\Generators\OrganizerGenerator
- *
- * flowlight.stubs:
- *   dto: dto.stub
- *   organizers: organizer.stub
- */
 class ApiGenerator implements Generator
 {
     protected Filesystem $files;
 
-    /**
-     * @var array<string, Generator>
-     */
+    /** @var array<string, PluggableGenerator> */
     protected array $generators = [];
+
+    /** @var array<string, array{class: class-string<PluggableGenerator>, stub: string, config_class: class-string<ModelConfigWrapper>}> */
+    protected array $configured = [];
 
     public function __construct(Filesystem $files)
     {
         $this->files = $files;
+        $this->configured = $this->getConfig();
 
-        /** @var array<string, class-string<Generator>> $configured */
-        $configured = config('flowlight.generators', []);
+        foreach ($this->configured as $key => $cfg) {
+            $class = $this->requireConfigValue($cfg, 'class', $key);
+            $stub = $this->requireConfigValue($cfg, 'stub', $key);
+            $configClass = $this->requireConfigValue($cfg, 'config_class', $key);
 
-        foreach ($configured as $key => $class) {
-            $this->generators[$key] = new $class($files);
+            /** @var class-string<PluggableGenerator> $class */
+            $this->generators[$key] = new $class($files, [
+                'key' => $key,
+                'stub' => $stub,
+                'config_class' => $configClass,
+            ]);
         }
     }
 
     /**
-     * Generate API-related files by delegating to configured generators.
+     * Generate API-related files for all models in the given tree
+     * by delegating to each configured sub-generator.
      *
-     * @return array<string, list<string>>
+     * @return array<string, list<string>> Map of statuses to file paths.
      */
     public function output(Tree $tree): array
     {
+        /** @var array<string, list<string>> $output */
         $output = ['created' => []];
 
-        foreach ($this->generators as $key => $generator) {
-            $stub = $this->resolveStub($key);
+        /** @var array<string, array<string, mixed>> $models */
+        $models = $tree->toArray()['api'] ?? [];
 
-            /** @var array<string, list<string>> $result */
-            $result = method_exists($generator, 'outputWithStub')
-                ? $generator->outputWithStub($tree, $stub)
-                : $generator->output($tree);
+        foreach ($models as $modelName => $definition) {
+            foreach ($this->generators as $key => $generator) {
+                $stub = $this->resolveStub($key);
+                $configClass = $this->getConfigClass($key);
 
-            foreach ($result as $status => $files) {
-                // At this point $files is guaranteed list<string>
-                $output[$status] = array_merge($output[$status] ?? [], $files);
+                $partialOutput = $generator->output(
+                    new $configClass($modelName, $definition, $key),
+                    $stub
+                );
+
+                foreach ($partialOutput as $status => $files) {
+                    /** @var list<string> $files */
+                    $output[$status] = array_merge($output[$status] ?? [], $files);
+                }
             }
         }
 
         return $output;
     }
 
-    /**
-     * Resolve stub contents for a given generator key.
-     *
-     * @throws \RuntimeException
-     */
     protected function resolveStub(string $key): string
     {
-        $stubFile = config("flowlight.stubs.$key");
+        $stubFile = $this->configured[$key]['stub'] ?? null;
         if (! is_string($stubFile) || $stubFile === '') {
-            throw new \RuntimeException("No stub configured for generator [$key]");
+            throw new RuntimeException("No stub configured for generator [$key]");
         }
 
         $custom = base_path("stubs/flowlight/{$stubFile}");
@@ -90,12 +89,47 @@ class ApiGenerator implements Generator
             return $this->files->get($default);
         }
 
-        throw new \RuntimeException("Stub file not found for [$key]: $stubFile");
+        throw new RuntimeException("Stub file not found for [$key]: $stubFile");
+    }
+
+    /** @return class-string<ModelConfigWrapper> */
+    protected function getConfigClass(string $key): string
+    {
+        $cfg = $this->configured[$key] ?? [];
+
+        /** @var class-string<ModelConfigWrapper> */
+        return $this->requireConfigValue($cfg, 'config_class', $key);
     }
 
     /**
-     * @return list<string>
+     * Ensure a required config value is present and non-empty.
+     *
+     * @param  array<string, string>  $cfg
+     *
+     * @throws \LogicException
      */
+    private function requireConfigValue(array $cfg, string $requiredKey, string $generatorKey): string
+    {
+        $value = $cfg[$requiredKey] ?? null;
+        if (! is_string($value) || trim($value) === '') {
+            throw new \LogicException(
+                static::class.": Missing required config key [{$requiredKey}] for generator [{$generatorKey}]"
+            );
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<string, array{class: class-string<PluggableGenerator>, stub: string, config_class: class-string<ModelConfigWrapper>}>
+     */
+    protected function getConfig(): array
+    {
+        /** @var array<string, array{class: class-string<PluggableGenerator>, stub: string, config_class: class-string<ModelConfigWrapper>}> */
+        return config('flowlight.generators', []);
+    }
+
+    /** @return list<string> */
     public function types(): array
     {
         return ['api'];

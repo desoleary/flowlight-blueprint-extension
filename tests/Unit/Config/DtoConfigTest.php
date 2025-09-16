@@ -1,59 +1,68 @@
 <?php
 
+namespace Tests\Unit\Config;
+
 use Flowlight\Generator\Config\DtoConfig;
 
-it('returns defaults when config is true', function () {
-    $config = new DtoConfig(true, 'User');
-
-    expect($config->getConfig())->toBeTrue()
-        ->and($config->getModelName())->toBe('User')
-        ->and($config->getNamespace())->toBe('App\\Domain\\Users\\Data')
-        ->and($config->getClassName())->toBe('UserData')
-        ->and($config->getExtends())->toBe('Flowlight\\BaseData')
-        ->and($config->getCustomMessages())->toBeArray()->toBeEmpty();
+beforeEach(function () {
+    $this->config = new DtoConfig('User', [
+        'fields' => [
+            'name' => ['type' => 'string'],
+        ],
+        'dto' => [
+            'namespace' => 'Custom\\NS',
+            'className' => 'MyUserDto',
+            'extends' => 'App\\BaseDto',
+        ],
+    ], 'dto');
 });
 
-it('returns overrides when config array provides values', function () {
-    $config = new DtoConfig([
-        'namespace' => 'Custom\\Namespace',
-        'className' => 'CustomData',
-        'extends' => 'Custom\\Base',
-        'messages' => ['foo' => 'bar', 'baz' => 'qux'],
-    ], 'Product');
+describe('shouldGenerate', function () {
+    it('returns true when dto is true', function () {
+        $c = new DtoConfig('User', ['dto' => true], 'dto');
+        expect($c->shouldGenerate())->toBeTrue();
+    });
 
-    expect($config->getConfig())->toMatchArray([
-        'namespace' => 'Custom\\Namespace',
-        'className' => 'CustomData',
-        'extends' => 'Custom\\Base',
-        'messages' => ['foo' => 'bar', 'baz' => 'qux'],
-    ]);
+    it('returns true when dto is a non-empty array', function () {
+        $c = new DtoConfig('User', ['dto' => ['namespace' => 'X']], 'dto');
+        expect($c->shouldGenerate())->toBeTrue();
+    });
 
-    expect($config->getModelName())->toBe('Product');
-    expect($config->getNamespace())->toBe('Custom\\Namespace');
-    expect($config->getClassName())->toBe('CustomData');
-    expect($config->getExtends())->toBe('Custom\\Base');
-    expect($config->getCustomMessages())->toMatchArray(['foo' => 'bar', 'baz' => 'qux']);
+    it('returns false when dto is not defined', function () {
+        $c = new DtoConfig('User', [], 'dto');
+        expect($c->shouldGenerate())->toBeFalse();
+    });
 });
 
-it('falls back to defaults when config array is missing keys', function () {
-    $config = new DtoConfig([], 'Order');
+describe('getNamespace', function () {
+    it('returns configured namespace', function () {
+        expect($this->config->getNamespace())->toBe('Custom\\NS');
+    });
 
-    expect($config->getNamespace())->toBe('App\\Domain\\Orders\\Data')
-        ->and($config->getClassName())->toBe('OrderData')
-        ->and($config->getExtends())->toBe('Flowlight\\BaseData')
-        ->and($config->getCustomMessages())->toBeArray()->toBeEmpty();
+    it('falls back to default namespace', function () {
+        $c = new DtoConfig('User', [], 'dto');
+        expect($c->getNamespace())->toBe('App\\Domain\\Users\\Data');
+    });
 });
 
-it('falls back to defaults when config values are invalid types', function () {
-    $config = new DtoConfig([
-        'namespace' => 123,
-        'className' => null,
-        'extends' => ['bad'],
-        'messages' => ['foo' => 1], // not strictly string values
-    ], 'Invoice');
+describe('getClassName', function () {
+    it('returns configured className', function () {
+        expect($this->config->getClassName())->toBe('MyUserDto');
+    });
 
-    expect($config->getNamespace())->toBe('App\\Domain\\Invoices\\Data')
-        ->and($config->getClassName())->toBe('InvoiceData')
-        ->and($config->getExtends())->toBe('Flowlight\\BaseData')
-        ->and($config->getCustomMessages())->toBeArray()->toEqual([]);
+    it('falls back to default className', function () {
+        $c = new DtoConfig('User', [], 'dto');
+        expect($c->getClassName())->toBe('UserData');
+    });
+});
+
+describe('getExtendedClassName', function () {
+    it('returns configured extended class', function () {
+        expect($this->config->getExtendedClassName())->toBe('App\\BaseDto');
+    });
+
+    it('falls back to default extended class', function () {
+        $c = new DtoConfig('User', [], 'dto');
+        expect($c->getExtendedClassName())->toBe('Flowlight\\BaseData');
+    });
 });

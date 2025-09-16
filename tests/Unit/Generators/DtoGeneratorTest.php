@@ -2,146 +2,95 @@
 
 namespace Tests\Unit\Generators;
 
-use Blueprint\Tree;
+use Flowlight\Generator\Config\DtoConfig;
 use Flowlight\Generator\Generators\DtoGenerator;
 use Illuminate\Filesystem\Filesystem;
 use Mockery;
 
 beforeEach(function () {
     $this->files = Mockery::mock(Filesystem::class);
+
     $this->generator = Mockery::mock(DtoGenerator::class, [$this->files])
         ->makePartial()
         ->shouldAllowMockingProtectedMethods();
 
-    $this->generator->shouldAllowMockingProtectedMethods();
-    $this->generator->shouldReceive('getPath')->andReturn(
-        sys_get_temp_dir().'/flowlight_test_app/UserData.php'
-    );
+    // Ensure safe file operations
+    $this->files->shouldReceive('makeDirectory')->andReturnTrue();
+    $this->files->shouldReceive('put')->andReturnTrue();
+
+    // Force consistent path for generated file
+    $this->generator->shouldReceive('getPath')
+        ->andReturn(sys_get_temp_dir().'/flowlight_test_app/UserData.php');
 });
 
 afterEach(function () {
-    exec('rm -rf '.escapeshellarg(sys_get_temp_dir().'/flowlight_test_app'));
-
     Mockery::close();
+    exec('rm -rf '.escapeshellarg(sys_get_temp_dir().'/flowlight_test_app'));
 });
 
 describe('DtoGenerator', function () {
-    it('returns correct types', function () {
-        expect($this->generator->types())->toBe(['api']);
+    describe('types', function () {
+        it('returns correct types', function () {
+            expect($this->generator->types())->toBe(['api']);
+        });
     });
 
-    it('builds properties for required and optional fields', function () {
-        $fields = [
-            'id' => ['type' => 'int', 'required' => true],
-            'name' => ['type' => 'string'],
-            'tags' => ['type' => 'array', 'required' => false],
-            'meta' => 'invalid', // should be skipped
-        ];
+    describe('output', function () {
+        it('returns empty created list when dto not defined', function () {
+            $model = new DtoConfig('User', [
+                'fields' => ['name' => ['type' => 'string']],
+            ], 'dto');
 
-        $result = $this->generator->buildProperties($fields);
+            $output = $this->generator->output($model, 'class {{ class }} {}');
 
-        expect($result)->toContain('@var int')
-            ->toContain('public $id;')
-            ->toContain('@var ?string')
-            ->toContain('public $name;')
-            ->toContain('@var ?array')
-            ->toContain('public $tags;')
-            ->not->toContain('meta');
-    });
+            expect($output)->toBe(['created' => []]);
+        });
 
-    it('populates stub with namespace, class, extends and properties', function () {
-        $stub = <<<'PHP'
+        it('returns empty created list when dto is false', function () {
+            $model = new DtoConfig('User', [
+                'fields' => ['name' => ['type' => 'string']],
+                'dto' => false,
+            ], 'dto');
+
+            $output = $this->generator->output($model, 'class {{ class }} {}');
+
+            expect($output)->toBe(['created' => []]);
+        });
+
+        it('generates dto file when dto flag is true', function () {
+            $stub = <<<'PHP'
 <?php
 
 namespace {{ namespace }};
 
-class {{ class }} {{ extends }}
+class {{ class }}
 {
-{{ properties }}
 }
 PHP;
 
-        $definition = [
-            'dto' => ['extends' => 'BaseDto'],
-            'fields' => [
-                'email' => ['type' => 'string', 'required' => true],
-            ],
-        ];
+            $model = new DtoConfig('User', [
+                'fields' => ['name' => ['type' => 'string']],
+                'dto' => true,
+            ], 'dto');
 
-        $result = $this->generator->populateStub(
-            $stub,
-            'User',
-            'App\\Domain\\Users\\Data',
-            'UserData',
-            $definition
-        );
+            $output = $this->generator->output($model, $stub);
 
-        expect($result)->toContain('namespace App\\Domain\\Users\\Data;')
-            ->toContain('class UserData extends BaseDto')
-            ->toContain('@var string')
-            ->toContain('public $email;');
-    });
+            expect($output['created'])->not->toBeEmpty();
+            expect($output['created'][0])->toEndWith('UserData.php');
+        });
 
-    it('populates stub without extends or properties when missing', function () {
-        $stub = 'namespace {{ namespace }}; class {{ class }} {{ extends }} { {{ properties }} }';
+        it('generates dto file when dto has config array', function () {
+            $stub = 'class {{ class }} {}';
 
-        $definition = []; // no dto, no fields
+            $model = new DtoConfig('User', [
+                'fields' => ['name' => ['type' => 'string']],
+                'dto' => ['namespace' => 'Custom\\NS'],
+            ], 'dto');
 
-        $result = $this->generator->populateStub(
-            $stub,
-            'User',
-            'App\\Domain\\Users\\Data',
-            'UserData',
-            $definition
-        );
+            $output = $this->generator->output($model, $stub);
 
-        expect($result)->toContain('namespace App\\Domain\\Users\\Data;')
-            ->toContain('class UserData')
-            ->not->toContain('extends')
-            ->not->toContain('public $');
-    });
-
-    it('outputs generated file paths from Tree', function () {
-        $stub = 'namespace {{ namespace }}; class {{ class }} {{ extends }} { {{ properties }} }';
-
-        $tree = new Tree([
-            'api' => [
-                'User' => [
-                    'dto' => ['extends' => 'BaseDto'],
-                    'fields' => [
-                        'id' => ['type' => 'int', 'required' => true],
-                    ],
-                ],
-            ],
-        ]);
-
-        // Expect filesystem interactions
-        $this->files->shouldReceive('makeDirectory')->andReturnTrue();
-        $this->files->shouldReceive('put')
-            ->withArgs(function ($path, $contents) {
-                expect($path)->toEndWith('UserData.php');
-                expect($contents)->toContain('class UserData extends BaseDto');
-
-                return true;
-            })
-            ->once();
-
-        $output = $this->generator->output($tree, $stub);
-
-        expect($output['created'][0])->toEndWith('UserData.php');
-    });
-
-    it('skips entities without dto config', function () {
-        $tree = new Tree([
-            'api' => [
-                'Post' => [
-                    'fields' => ['title' => ['type' => 'string']],
-                ],
-            ],
-        ]);
-
-        $output = $this->generator->output($tree, 'stub');
-
-        expect($output)->toBe(['created' => []]);
+            expect($output['created'])->not->toBeEmpty();
+            expect($output['created'][0])->toEndWith('UserData.php');
+        });
     });
 });

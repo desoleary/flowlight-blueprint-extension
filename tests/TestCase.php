@@ -4,7 +4,6 @@ namespace Tests;
 
 use Flowlight\Generator\Providers\FlowlightServiceProvider;
 use Illuminate\Config\Repository as ConfigRepository;
-use Illuminate\Container\Container;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Application;
 use PHPUnit\Framework\TestCase as BaseTestCase;

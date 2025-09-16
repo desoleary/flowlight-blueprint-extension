@@ -4,8 +4,6 @@ namespace Flowlight\Generator\Providers;
 
 use Blueprint\Blueprint;
 use Flowlight\Generator\Generators\ApiGenerator;
-use Flowlight\Generator\Generators\DtoGenerator;
-use Flowlight\Generator\Generators\OrganizerGenerator;
 use Illuminate\Contracts\Support\DeferrableProvider;
 use Illuminate\Support\ServiceProvider;
 
@@ -55,20 +53,8 @@ class FlowlightServiceProvider extends ServiceProvider implements DeferrableProv
      */
     public function provides(): array
     {
-        return array_merge(
-            $this->defaultGenerators(),
-            [Blueprint::class, ApiGenerator::class]
-        );
-    }
+        $generators = array_values(config('flowlight.generators', []));
 
-    /**
-     * @return list<class-string>
-     */
-    protected function defaultGenerators(): array
-    {
-        return [
-            DtoGenerator::class,
-            OrganizerGenerator::class,
-        ];
+        return array_merge([Blueprint::class, ApiGenerator::class], $generators);
     }
 }

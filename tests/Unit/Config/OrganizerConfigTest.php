@@ -1,52 +1,68 @@
 <?php
 
+namespace Tests\Unit\Config;
+
 use Flowlight\Generator\Config\OrganizerConfig;
 
-describe('OrganizerConfig', function () {
-    describe('__construct and getConfig', function () {
-        it('stores and returns true config', function () {
-            $config = new OrganizerConfig(true, 'User');
-            expect($config->getConfig())->toBeTrue();
-        });
+beforeEach(function () {
+    $this->config = new OrganizerConfig('User', [
+        'organizers' => [
+            'create' => true,
+            'read' => false,
+            'list' => true,
+        ],
+    ], 'organizers');
+});
 
-        it('stores and returns false config', function () {
-            $config = new OrganizerConfig(false, 'User');
-            expect($config->getConfig())->toBeFalse();
-        });
-
-        it('stores and returns array config with all true', function () {
-            $raw = ['create' => true, 'update' => true];
-            $config = new OrganizerConfig($raw, 'User');
-            expect($config->getConfig())->toBe($raw);
-        });
-
-        it('stores and returns array config with mixed values', function () {
-            $raw = ['create' => true, 'read' => false, 'delete' => true];
-            $config = new OrganizerConfig($raw, 'User');
-            expect($config->getConfig())->toBe($raw);
-        });
-
-        it('stores and returns empty array config', function () {
-            $raw = [];
-            $config = new OrganizerConfig($raw, 'User');
-            expect($config->getConfig())->toBe($raw);
-        });
+describe('shouldGenerate', function () {
+    it('returns true when organizers is true', function () {
+        $c = new OrganizerConfig('User', ['organizers' => true], 'organizers');
+        expect($c->shouldGenerate())->toBeTrue();
     });
 
-    describe('getModelName', function () {
-        it('returns the model name when config is true', function () {
-            $config = new OrganizerConfig(true, 'Order');
-            expect($config->getModelName())->toBe('Order');
-        });
+    it('returns true when organizers is a non-empty array', function () {
+        $c = new OrganizerConfig('User', ['organizers' => ['create' => true]], 'organizers');
+        expect($c->shouldGenerate())->toBeTrue();
+    });
 
-        it('returns the model name when config is false', function () {
-            $config = new OrganizerConfig(false, 'Invoice');
-            expect($config->getModelName())->toBe('Invoice');
-        });
+    it('returns false when organizers not defined', function () {
+        $c = new OrganizerConfig('User', [], 'organizers');
+        expect($c->shouldGenerate())->toBeFalse();
+    });
+});
 
-        it('returns the model name when config is array', function () {
-            $config = new OrganizerConfig(['read' => true], 'Customer');
-            expect($config->getModelName())->toBe('Customer');
-        });
+describe('getNamespace', function () {
+    it('returns configured namespace', function () {
+        $c = new OrganizerConfig('User', ['organizers' => ['namespace' => 'Custom\\NS']], 'organizers');
+        expect($c->getNamespace())->toBe('Custom\\NS');
+    });
+
+    it('falls back to default namespace', function () {
+        $c = new OrganizerConfig('User', [], 'organizers');
+        expect($c->getNamespace())->toBe('App\\Domain\\Users\\Organizers');
+    });
+});
+
+describe('getClassName', function () {
+    it('returns configured className', function () {
+        $c = new OrganizerConfig('User', ['organizers' => ['className' => 'CustomOrganizer']], 'organizers');
+        expect($c->getClassName())->toBe('CustomOrganizer');
+    });
+
+    it('falls back to default className', function () {
+        $c = new OrganizerConfig('User', [], 'organizers');
+        expect($c->getClassName())->toBe('UserOrganizer');
+    });
+});
+
+describe('getExtendedClassName', function () {
+    it('returns configured extended class', function () {
+        $c = new OrganizerConfig('User', ['organizers' => ['extends' => 'BaseOrganizer']], 'organizers');
+        expect($c->getExtendedClassName())->toBe('BaseOrganizer');
+    });
+
+    it('falls back to default extended class when not configured', function () {
+        $c = new OrganizerConfig('User', [], 'organizers');
+        expect($c->getExtendedClassName())->toBe('Flowlight\\LightService\\Organizer');
     });
 });

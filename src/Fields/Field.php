@@ -1,6 +1,6 @@
 <?php
 
-namespace Flowlight\Generator\Config;
+namespace Flowlight\Generator\Fields;
 
 use Illuminate\Support\Str;
 
@@ -25,7 +25,7 @@ use Illuminate\Support\Str;
  *     messages?: array<string,string>
  * }
  */
-class FieldConfig
+class Field
 {
     /**
      * The field name (typically corresponds to the model/DTO property).
@@ -51,11 +51,16 @@ class FieldConfig
      * Create a new field configuration.
      *
      * @param  string  $name  The field name (e.g., "email").
-     * @param  FieldConfigArray  $config  The raw configuration array.
+     * @param  FieldConfigArray|string  $config
      */
-    public function __construct(string $name, array $config)
+    public function __construct(string $name, array|string $config)
     {
         $this->name = $name;
+
+        if (is_string($config)) {
+            $config = ['type' => $config];
+        }
+
         $this->config = $config;
     }
 
@@ -192,6 +197,16 @@ class FieldConfig
         }
 
         return $messages;
+    }
+
+    /**
+     * Return the raw configuration for this field.
+     *
+     * @return FieldConfigArray
+     */
+    public function toArray(): array
+    {
+        return $this->config;
     }
 
     /**

@@ -2,6 +2,8 @@
 
 namespace Flowlight\Generator\Generators;
 
+use Flowlight\Generator\Config\ModelConfigWrapper;
+use Flowlight\Generator\Fields\FieldCollection;
 use Illuminate\Filesystem\Filesystem;
 
 /**
@@ -9,8 +11,6 @@ use Illuminate\Filesystem\Filesystem;
  *
  * Uses PluggableGenerator to render DTO classes based on
  * api definitions with a `dto` section.
- *
- * @phpstan-import-type ApiDefinition from PluggableGenerator
  */
 class DtoGenerator extends PluggableGenerator
 {
@@ -18,38 +18,26 @@ class DtoGenerator extends PluggableGenerator
     {
         parent::__construct($files, [
             'key' => 'dto',
-            'namespace' => 'App\\Domain\\{{entity}}s\\Data',
+            'namespace' => 'App\\Domain\\{{modelName}}s\\Data',
             'suffix' => 'Data',
         ]);
     }
 
-    /**
-     * @param  ApiDefinition  $definition
-     */
     public function populateStub(
         string $stub,
-        string $entity,
+        string $modelName,
         string $namespace,
         string $className,
-        array $definition
+        ?string $extends,
+        ModelConfigWrapper $model
     ): string {
-        $dtoConfig = is_array($definition['dto'] ?? null) ? $definition['dto'] : [];
-        $extends = isset($dtoConfig['extends']) && is_string($dtoConfig['extends'])
-            ? $dtoConfig['extends']
-            : null;
-
-        /** @var array<string,mixed> $fields */
-        $fields = is_array($definition['fields'] ?? null)
-            ? $definition['fields']
-            : [];
-
         return str_replace(
             ['{{ namespace }}', '{{ class }}', '{{ extends }}', '{{ properties }}'],
             [
                 $namespace,
                 $className,
                 $extends ? "extends {$extends}" : '',
-                $this->buildProperties($fields),
+                $this->buildProperties($model->getFields()),
             ],
             $stub
         );
@@ -57,22 +45,14 @@ class DtoGenerator extends PluggableGenerator
 
     /**
      * Build property declarations for a DTO class.
-     *
-     * @param  array<string,mixed>  $fields
      */
-    public function buildProperties(array $fields): string
+    protected function buildProperties(FieldCollection $fields): string
     {
         $props = '';
-        foreach ($fields as $name => $meta) {
-            if (! is_array($meta)) {
-                continue; // skip invalid entries
-            }
 
-            $type = isset($meta['type']) && is_string($meta['type'])
-                ? $meta['type']
-                : 'mixed';
-
-            $required = isset($meta['required']) && $meta['required'] === true;
+        foreach ($fields as $name => $field) {
+            $type = $field->getType();
+            $required = $field->isRequired();
             $nullable = $required ? '' : '?';
 
             $props .= "    /** @var {$nullable}{$type} */\n";

@@ -2,20 +2,22 @@
 
 namespace Flowlight\Generator\Config;
 
+use Flowlight\Generator\Fields\Field;
+use Flowlight\Generator\Fields\FieldCollection;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 
 /**
- * Model configuration wrapper for Flowlight code generation.
+ * Generic configuration wrapper for a single API model definition.
  *
- * Encapsulates configuration for a model, including:
- * - Table name
- * - Fields and their rules/messages
- * - DTO configuration
- * - Organizer configuration
+ * Wraps the raw definition for a model from Blueprint’s parsed tree
+ * (e.g., from draft.yml under `api`). Provides normalized accessors
+ * for namespace, className, extended class, fields, etc.
  *
- * Provides accessors and defaults, so consuming code can easily
- * work with a normalized representation of the model configuration.
+ * Children must implement fallback logic for their type-specific defaults
+ * by defining:
+ * - getDefaultNamespace()
+ * - getDefaultClassName()
+ * - getDefaultExtendedClassName()
  *
  * @phpstan-type FieldConfigArray array{
  *     type?: string,
@@ -25,72 +27,71 @@ use Illuminate\Support\Str;
  *     rules?: list<string>,
  *     messages?: array<string,string>
  * }
- * @phpstan-type ModelConfigArray array{
+ * @phpstan-type ModelDefinition array{
  *     table?: string,
  *     fields?: array<string, FieldConfigArray>,
  *     dto?: array<string,mixed>|true,
  *     organizers?: array<string,bool>|bool
  * }
  */
-class ModelConfigWrapper
+abstract class ModelConfigWrapper
 {
     /**
-     * Raw model configuration.
+     * The raw model definition array from Blueprint.
      *
-     * @var ModelConfigArray
+     * @var ModelDefinition
      */
-    protected array $config;
+    protected array $definition;
 
     /**
-     * The name of the model.
-     *
-     * Used to derive default table names, DTOs, and organizers.
+     * The model name (e.g., "User").
      */
     protected string $modelName;
 
     /**
-     * Collection of field configurations for this model.
-     *
-     * Keys are field names, values are {@see FieldConfig} instances.
-     *
-     * @var Collection<string, FieldConfig>
+     * The generator type this wrapper is bound to (e.g., "dto", "organizers").
      */
-    protected Collection $fields;
+    protected string $type;
 
     /**
-     * Create a new model configuration wrapper.
+     * Normalized collection of field configs.
      *
-     * @param  string  $modelName  The name of the model.
-     * @param  ModelConfigArray  $config  The raw configuration array.
+     * Keys are field names, values are {@see Field}.
      */
-    public function __construct(string $modelName, array $config)
+    protected FieldCollection $fields;
+
+    /**
+     * @param  string  $modelName  Model name (e.g., "User").
+     * @param  ModelDefinition  $definition  Raw model definition from Tree.
+     * @param  string  $type  Target generator type ("dto", "organizers", etc.).
+     */
+    public function __construct(string $modelName, array $definition, string $type)
     {
         $this->modelName = $modelName;
-        $this->config = $config;
+        $this->definition = $definition;
+        $this->type = $type;
         $this->fields = $this->initializeFields();
     }
 
     /**
-     * Initialize field configuration objects from the raw config.
-     *
-     * @return Collection<string, FieldConfig> Collection of field configs.
+     * Fallback namespace if not defined in config.
      */
-    protected function initializeFields(): Collection
-    {
-        $fields = collect();
+    abstract protected function getDefaultNamespace(): string;
 
-        foreach ($this->config['fields'] ?? [] as $fieldName => $fieldConfig) {
-            /** @var FieldConfigArray $fieldConfig */
-            $fields->put($fieldName, new FieldConfig($fieldName, $fieldConfig));
-        }
+    /**
+     * Fallback class name if not defined in config.
+     */
+    abstract protected function getDefaultClassName(): string;
 
-        return $fields;
-    }
+    /**
+     * Fallback parent class if not defined in config.
+     *
+     * Return null if there is no natural base class.
+     */
+    abstract protected function getDefaultExtendedClassName(): ?string;
 
     /**
      * Get the model name.
-     *
-     * @return string The model name.
      */
     public function getModelName(): string
     {
@@ -98,119 +99,140 @@ class ModelConfigWrapper
     }
 
     /**
-     * Get the table name for the model.
-     *
-     * - Defaults to the snake-cased, pluralized model name.
-     * - Can be overridden via the `table` key in config.
-     *
-     * @return string The table name.
+     * Get the generator type (e.g., "dto", "organizers").
      */
-    public function getTableName(): string
+    public function getType(): string
     {
-        return $this->config['table'] ?? Str::snake(Str::plural($this->modelName));
+        return $this->type;
     }
 
     /**
-     * Determine if a DTO should be generated for the model.
+     * Raw definition array for this model.
      *
-     * @return bool True if DTO generation is enabled or fields exist.
+     * @return ModelDefinition
      */
-    public function shouldGenerateDto(): bool
+    public function getDefinition(): array
     {
-        // Generate DTO if explicitly enabled
-        if (($this->config['dto'] ?? null) === true) {
-            return true;
-        }
-
-        // Generate DTO if dto is a non-empty array
-        if (is_array($this->config['dto'] ?? null) && ! empty($this->config['dto'])) {
-            return true;
-        }
-
-        return false;
+        return $this->definition;
     }
 
     /**
-     * Get the DTO configuration wrapper for this model.
-     *
-     * @return DtoConfig DTO configuration object.
+     * Get all field configs.
      */
-    public function getDtoConfig(): DtoConfig
-    {
-        /** @var array<string,mixed>|true $dtoConfig */
-        $dtoConfig = $this->config['dto'] ?? [];
-
-        return new DtoConfig($dtoConfig, $this->modelName);
-    }
-
-    /**
-     * Get all field configurations.
-     *
-     * @return Collection<string, FieldConfig> Collection of field configs.
-     */
-    public function getFields(): Collection
+    public function getFields(): FieldCollection
     {
         return $this->fields;
     }
 
     /**
-     * Get a specific field configuration by name.
-     *
-     * @param  string  $fieldName  The field name.
-     * @return FieldConfig|null The field config or null if not found.
+     * Get a single field by name.
      */
-    public function getField(string $fieldName): ?FieldConfig
+    public function getField(string $name): ?Field
     {
-        return $this->fields->get($fieldName);
+        return $this->fields->get($name);
     }
 
     /**
-     * Determine if organizers should be generated for this model.
-     *
-     * @return bool True if organizers config exists and is not false.
+     * Does this model enable generation for the current type?
      */
-    public function shouldGenerateOrganizers(): bool
+    public function shouldGenerate(): bool
     {
-        return isset($this->config['organizers']) && $this->config['organizers'] !== false;
-    }
+        $section = $this->definition[$this->type] ?? null;
 
-    /**
-     * Get the list of organizer types to generate.
-     *
-     * - Defaults to `['create','read','update','delete','list']` when `organizers` is `true`.
-     * - Otherwise, returns only the enabled organizer keys.
-     *
-     * @return list<string> List of organizer operation types.
-     */
-    public function getOrganizerTypes(): array
-    {
-        if (! $this->shouldGenerateOrganizers()) {
-            return [];
+        if ($section === true) {
+            return true;
         }
 
-        $organizers = $this->config['organizers'] ?? [];
-
-        if ($organizers === true) {
-            return ['create', 'read', 'update', 'delete', 'list'];
-        }
-
-        // Ensure keys are cast to string for PHPStan
-        return array_map(
-            static fn ($key): string => (string) $key,
-            array_keys(array_filter((array) $organizers))
-        );
+        return is_array($section) && ! empty($section);
     }
 
     /**
-     * Get the organizer configuration wrapper for this model.
+     * Namespace for the generated class.
      *
-     * @return OrganizerConfig Organizer configuration object.
+     * - Uses `namespace` from definition if present.
+     * - Otherwise falls back to {@see getDefaultNamespace()}.
      */
-    public function getOrganizerConfig(): OrganizerConfig
+    public function getNamespace(): string
     {
-        /** @var array<string,bool>|true|false $organizers */
-        $organizers = $this->config['organizers'] ?? [];
+        $section = $this->definition[$this->type] ?? [];
 
-        return new OrganizerConfig($organizers, $this->modelName);
+        if (is_array($section) && isset($section['namespace']) && is_string($section['namespace'])) {
+            return $section['namespace'];
+        }
+
+        $fallback = $this->getDefaultNamespace();
+        $this->throwIfEmptyValue($fallback, 'No default namespace provided');
+
+        return $fallback;
+    }
+
+    /**
+     * Class name for the generated type.
+     *
+     * - Uses `className` from definition if present.
+     * - Otherwise falls back to {@see getDefaultClassName()}.
+     */
+    public function getClassName(): string
+    {
+        $section = $this->definition[$this->type] ?? [];
+
+        if (is_array($section) && isset($section['className']) && is_string($section['className'])) {
+            return $section['className'];
+        }
+
+        $fallback = $this->getDefaultClassName();
+        $this->throwIfEmptyValue($fallback, 'No default class name provided');
+
+        return $fallback;
+    }
+
+    /**
+     * Parent class to extend, if configured.
+     *
+     * - Uses `extends` from definition if present.
+     * - Otherwise falls back to {@see getDefaultExtendedClassName()}.
+     */
+    public function getExtendedClassName(): ?string
+    {
+        $section = $this->definition[$this->type] ?? [];
+
+        if (is_array($section) && isset($section['extends']) && is_string($section['extends'])) {
+            return $section['extends'];
+        }
+
+        $fallback = $this->getDefaultExtendedClassName();
+        $this->throwIfEmptyValue($fallback, 'No default extended class name provided');
+
+        return $fallback;
+    }
+
+    /**
+     * Table name (default: snake plural of model name).
+     */
+    public function getTableName(): string
+    {
+        if (! isset($this->definition['table'])) {
+            throw new \LogicException(static::class.': table name must be provided');
+        }
+
+        $tableName = (string) $this->definition['table'];
+        $this->throwIfEmptyValue($tableName, 'table name must be provided');
+
+        return $tableName;
+    }
+
+    /**
+     * Initialize field objects from raw definition.
+     */
+    protected function initializeFields(): FieldCollection
+    {
+        return new FieldCollection($this->definition['fields'] ?? []);
+    }
+
+    private function throwIfEmptyValue(mixed $value, string $message): void
+    {
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            throw new \LogicException(static::class.$message);
+        }
     }
 }
