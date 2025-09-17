@@ -16,12 +16,12 @@ beforeEach(function () {
             string $modelName,
             string $namespace,
             string $className,
-            ?string $extends,
+            ?string $parentClass,
             ModelConfigWrapper $model
         ): string {
             return str_replace(
                 ['{{ modelName }}', '{{ namespace }}', '{{ class }}', '{{ extends }}'],
-                [$modelName, $namespace, $className, $extends ?? ''],
+                [$modelName, $namespace, $className, $parentClass ?? ''],
                 $stub
             );
         }
@@ -108,12 +108,12 @@ PHP;
                 string $modelName,
                 string $namespace,
                 string $className,
-                ?string $extends,
+                ?string $parentClass,
                 ModelConfigWrapper $model
             ): string {
                 return str_replace(
                     ['{{ modelName }}', '{{ namespace }}', '{{ class }}', '{{ extends }}'],
-                    [$modelName, $namespace, $className, $extends ?? ''],
+                    [$modelName, $namespace, $className, $parentClass ?? ''],
                     $stub
                 );
             }

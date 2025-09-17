@@ -3,19 +3,12 @@
 namespace Flowlight\Generator\Generators;
 
 use Flowlight\Generator\Config\ModelConfigWrapper;
+use Flowlight\Generator\Types;
 use Illuminate\Filesystem\Filesystem;
 
 /**
- * Abstract base for pluggable generators (DTO, Organizer, etc.).
- *
- * Handles common logic for:
- * - Checking whether a model should be generated
- * - Resolving namespace, class, and extends values
- * - Rendering stubs
- * - Creating directories and writing files
- *
- * Child classes must implement {@see populateStub()} to replace placeholders
- * in their stub template.
+ * @phpstan-import-type PluginConfig from Types
+ * /
  */
 abstract class PluggableGenerator
 {
@@ -28,7 +21,8 @@ abstract class PluggableGenerator
     protected string $classSuffix;
 
     /**
-     * @param  array{key: string, namespace: string, suffix: string}  $pluginConfig
+     * @phpstan-param Filesystem $files
+     * @phpstan-param PluginConfig $pluginConfig
      */
     public function __construct(Filesystem $files, array $pluginConfig)
     {
@@ -90,7 +84,7 @@ abstract class PluggableGenerator
      * @param  string  $modelName  The entity/model name (e.g. "User")
      * @param  string  $namespace  The resolved namespace
      * @param  string  $className  The resolved class name
-     * @param  string|null  $extends  Parent class, or null
+     * @param  string|null  $parentClass  Parent class, or null
      * @param  ModelConfigWrapper  $model  Model wrapper containing field/config info
      */
     abstract public function populateStub(
@@ -98,7 +92,7 @@ abstract class PluggableGenerator
         string $modelName,
         string $namespace,
         string $className,
-        ?string $extends,
+        ?string $parentClass,
         ModelConfigWrapper $model
     ): string;
 

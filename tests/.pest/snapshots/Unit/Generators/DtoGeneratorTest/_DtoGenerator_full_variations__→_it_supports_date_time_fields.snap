@@ -1,0 +1,55 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Events\Data;
+
+use Flowlight\BaseData;
+use Illuminate\Validation\Rule;
+
+final class EventData extends BaseData
+{
+    public function __construct(
+        public \DateTimeInterface $starts_at,
+        public ?\DateTimeInterface $ends_at,
+    )
+    {
+    }
+
+    /** @return array<string,string> */
+    public static function attributes(): array
+    {
+        return [
+            'starts_at' => 'Starts At',
+            'ends_at' => 'Ends At',
+        ];
+    }
+
+    /** @return array<string,string> */
+    public static function messages(): array
+    {
+        return [
+            'starts_at.required' => 'Starts At is required.',
+            'starts_at.date' => 'Starts At must be a valid date.',
+            'ends_at.sometimes' => 'Ends At is optional.',
+            'ends_at.date' => 'Ends At must be a valid date.',
+        ];
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected static function rules(): array
+    {
+        return [
+            'starts_at' => [
+                'required',
+                'date',
+            ],
+            'ends_at' => [
+                'sometimes',
+                'date',
+            ],
+        ];
+    }
+}

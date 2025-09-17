@@ -1,0 +1,57 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Flowlight\BaseData;
+use Illuminate\Validation\Rule;
+
+final class {{ class }} extends {{ parentClassName }}
+{
+    public function __construct(
+{{#fields}}
+        public {{ phpType }} ${{ name }},
+{{/fields}}
+    )
+    {
+    }
+
+    /** @return array<string,string> */
+    public static function attributes(): array
+    {
+        return [
+{{#fields}}
+            '{{ name }}' => '{{ attribute }}',
+{{/fields}}
+        ];
+    }
+
+    /** @return array<string,string> */
+    public static function messages(): array
+    {
+        return [
+{{#fields}}
+{{#messages}}
+            '{{ key }}' => '{{ value }}',
+{{/messages}}
+{{/fields}}
+        ];
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected static function rules(): array
+    {
+        return [
+{{#fields}}
+            '{{ name }}' => [
+{{#rules}}
+                '{{ value }}',
+{{/rules}}
+            ],
+{{/fields}}
+        ];
+    }
+}

@@ -1,0 +1,47 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Accounts\Data;
+
+use Flowlight\BaseData;
+use Illuminate\Validation\Rule;
+
+final class AccountData extends BaseData
+{
+    public function __construct(
+        public string $username,
+    )
+    {
+    }
+
+    /** @return array<string,string> */
+    public static function attributes(): array
+    {
+        return [
+            'username' => 'Username',
+        ];
+    }
+
+    /** @return array<string,string> */
+    public static function messages(): array
+    {
+        return [
+            'username.required' => 'Username cannot be blank!',
+            'username.string' => 'Username must be text.',
+        ];
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected static function rules(): array
+    {
+        return [
+            'username' => [
+                'required',
+                'string',
+            ],
+        ];
+    }
+}

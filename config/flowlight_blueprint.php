@@ -19,7 +19,7 @@ return [
     'generators' => [
         'dto' => [
             'class' => DtoGenerator::class,
-            'stub' => 'dto.stub',
+            'stub' => 'dto.stub.hbs',
             'config_class' => DtoConfig::class,
         ],
         'organizer' => [

@@ -27,7 +27,7 @@ class OrganizerGenerator extends PluggableGenerator
         string $modelName,
         string $namespace,
         string $className,
-        ?string $extends,
+        ?string $parentClass,
         ModelConfigWrapper $model
     ): string {
         return str_replace(
@@ -35,7 +35,7 @@ class OrganizerGenerator extends PluggableGenerator
             [
                 $namespace,
                 $className,
-                $extends ? "extends {$extends}" : '',
+                $parentClass ? "extends {$parentClass}" : '',
             ],
             $stub
         );

@@ -54,7 +54,7 @@ php artisan vendor:publish --tag=flowlight-stubs
 This creates:
 
 - `config/flowlight.php` → field type rules, defaults
-- `stubs/flowlight/` → stub templates (e.g., `dto.stub`)
+- `stubs/flowlight/` → stub templates (e.g., `dto.stub.hbs`)
 
 ---
 

@@ -1,20 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Flowlight\Generator\Fields;
 
+use Flowlight\Generator\Support\TypeRuleMap;
 use Illuminate\Support\Str;
 
 /**
  * Field configuration container for Flowlight DTO generation.
  *
- * This class holds configuration metadata for a single field
- * within a DTO, including its type, validation rules, messages,
- * and presentation details (e.g., attribute label).
+ * This class represents metadata for a single field in a DTO:
+ * - Name
+ * - Type (and PHP type mapping)
+ * - Required/optional status
+ * - Validation rules
+ * - Validation messages
+ * - Attribute label
  *
- * It provides defaults for type (`string`), required state (`true`),
- * and humanized labels (based on the field name). Validation rules
- * and messages can be overridden or automatically generated based
- * on configuration and conventions.
+ * It provides methods for generating deterministic validation
+ * rules, error messages, and code-generation-ready structures.
  *
  * @phpstan-type FieldConfigArray array{
  *     type?: string,
@@ -28,20 +33,58 @@ use Illuminate\Support\Str;
 class Field
 {
     /**
-     * The field name (typically corresponds to the model/DTO property).
+     * Priority order for validation messages.
+     * Rules are always normalized in this order when possible.
+     *
+     * @var list<string>
+     */
+    protected const MESSAGE_PRIORITY = [
+        'required',
+        'sometimes',
+        'nullable',
+        'string',
+        'integer',
+        'numeric',
+        'boolean',
+        'date',
+        'array',
+        'email',
+        'min',
+        'max',
+        'in',
+    ];
+
+    /**
+     * Default validation message templates.
+     * Placeholders:
+     * - :label  → Field label
+     * - :value  → Numeric/string value from rule (e.g. max:255 → 255)
+     * - :values → Comma-separated list of values (e.g. in:a,b → a,b)
+     *
+     * @var array<string,string>
+     */
+    protected const DEFAULT_MESSAGES = [
+        'required' => ':label is required.',
+        'sometimes' => ':label is optional.',
+        'string' => ':label must be text.',
+        'integer' => ':label must be an integer.',
+        'numeric' => ':label must be a number.',
+        'boolean' => ':label must be true or false.',
+        'date' => ':label must be a valid date.',
+        'array' => ':label must be an array.',
+        'email' => ':label must be a valid email address.',
+        'max' => ':label cannot exceed :value.',
+        'min' => ':label must be at least :value.',
+        'in' => ':label must be one of: :values.',
+    ];
+
+    /**
+     * Field name (e.g., "email").
      */
     protected string $name;
 
     /**
-     * Raw configuration for this field.
-     *
-     * Keys can include:
-     * - `type`      (string)  : Field type, e.g. "string", "integer".
-     * - `required`  (bool)    : Whether the field is required.
-     * - `length`    (int)     : Maximum length (applies to string/text).
-     * - `attribute` (string)  : Custom human-readable label.
-     * - `rules`     (string[]) : Explicit validation rules.
-     * - `messages`  (array<string,string>) : Custom error messages.
+     * Raw field configuration.
      *
      * @var FieldConfigArray
      */
@@ -51,7 +94,7 @@ class Field
      * Create a new field configuration.
      *
      * @param  string  $name  The field name (e.g., "email").
-     * @param  FieldConfigArray|string  $config
+     * @param  FieldConfigArray|string  $config  Field config array or shorthand type string.
      */
     public function __construct(string $name, array|string $config)
     {
@@ -66,8 +109,6 @@ class Field
 
     /**
      * Get the field name.
-     *
-     * @return string The configured field name.
      */
     public function getName(): string
     {
@@ -75,220 +116,307 @@ class Field
     }
 
     /**
-     * Get the field type.
-     *
-     * Defaults to `"string"` if not specified.
-     *
-     * @return string The field type.
+     * Get the configured type of the field.
+     * Defaults to "string".
      */
     public function getType(): string
     {
-        /** @var string|null $type */
-        $type = $this->config['type'] ?? null;
-
-        return $type ?? 'string';
+        return $this->config['type'] ?? 'string';
     }
 
     /**
      * Determine whether the field is required.
-     *
-     * Defaults to `true` if not specified.
-     *
-     * @return bool True if required, false otherwise.
+     * Defaults to true.
      */
     public function isRequired(): bool
     {
-        /** @var bool|null $req */
-        $req = $this->config['required'] ?? null;
-
-        return $req ?? true;
+        return $this->config['required'] ?? true;
     }
 
     /**
-     * Get the maximum length for the field.
-     *
-     * Typically used with string/text types to enforce a "max" rule.
-     *
-     * @return int|null The maximum length, or null if not set.
+     * Get the maximum length (if applicable).
+     * Only relevant for string/text types.
      */
     public function getLength(): ?int
     {
-        /** @var int|null $len */
-        $len = $this->config['length'] ?? null;
-
-        return $len;
+        return $this->config['length'] ?? null;
     }
 
     /**
-     * Get the human-readable attribute label.
-     *
-     * - Defaults to a title-cased version of the field name with underscores replaced by spaces.
-     * - Can be overridden via the `attribute` key in config.
-     *
-     * @return string Attribute label.
+     * Get the human-readable label for this field.
+     * Defaults to a title-cased version of the field name.
      */
     public function getAttributeLabel(): string
     {
-        /** @var string|null $attr */
-        $attr = $this->config['attribute'] ?? null;
+        return $this->config['attribute'] ?? Str::title(str_replace('_', ' ', $this->name));
+    }
 
-        return $attr ?? Str::title(str_replace('_', ' ', $this->name));
+    /**
+     * Get an attribute entry for DTO generation.
+     *
+     * @return array<string,string>
+     */
+    public function getAttributeEntry(): array
+    {
+        return [$this->name => $this->getAttributeLabel()];
     }
 
     /**
      * Get the validation rules for this field.
      *
      * Rule resolution order:
-     * 1. Use explicitly provided `rules` if present.
-     * 2. Otherwise, pull default rules from `config('flowlight.field_types')` by type.
-     * 3. Ensure `required` or `sometimes` is applied depending on `isRequired()`.
-     * 4. Append `max:{length}` if applicable (for string/text fields with a length).
-     * 5. Ensure uniqueness of rules.
+     * 1. Use explicit `rules` from config if present.
+     * 2. Otherwise, derive defaults from {@see TypeRuleMap}.
+     * 3. Ensure either "required" or "sometimes" is present.
+     * 4. Append "max:{length}" for string fields with a length.
      *
-     * @return list<string> A list of validation rule strings.
+     * @return list<string>
      */
     public function getRules(): array
     {
-        /** @var list<string> $rules */
         $rules = $this->config['rules'] ?? [];
 
-        /** @var array<string,array{default_rules?:list<string>}> $fieldTypes */
-        $fieldTypes = (array) config('flowlight.field_types', []);
+        // Merge defaults from TypeRuleMap
+        $defaults = TypeRuleMap::rules($this->getType());
+        $rules = array_merge($defaults, $rules);
 
-        if ($rules === [] && isset($fieldTypes[$this->getType()]['default_rules'])) {
-            $rules = array_merge($rules, $fieldTypes[$this->getType()]['default_rules']);
+        // Determine presence of "nullable" or "sometimes"
+        $hasNullableOrSometimes = false;
+        foreach ($rules as $rule) {
+            if (str_starts_with($rule, 'nullable') || str_starts_with($rule, 'sometimes')) {
+                $hasNullableOrSometimes = true;
+                break;
+            }
         }
 
-        if ($this->isRequired() && ! in_array('sometimes', $rules, true) && ! in_array('nullable', $rules, true)) {
-            array_unshift($rules, 'required');
-        } elseif (! $this->isRequired() && ! in_array('sometimes', $rules, true)) {
-            array_unshift($rules, 'sometimes');
+        // Insert required/sometimes/nullable in correct order
+        if (! $hasNullableOrSometimes) {
+            if ($this->isRequired()) {
+                array_unshift($rules, 'required');
+            } else {
+                array_unshift($rules, 'sometimes');
+            }
+        } else {
+            // Move nullable/sometimes to the front
+            usort($rules, function ($a, $b) {
+                if ($a === 'nullable' || $a === 'sometimes') {
+                    return -1;
+                }
+                if ($b === 'nullable' || $b === 'sometimes') {
+                    return 1;
+                }
+
+                return 0;
+            });
         }
 
+        // Add max length rule for strings/text
         if ($this->getLength() !== null && in_array($this->getType(), ['string', 'text'], true)) {
             $rules[] = "max:{$this->getLength()}";
         }
 
-        /** @var list<string> $unique */
-        $unique = array_values(array_unique($rules));
-
-        return $unique;
+        return array_values(array_unique($rules));
     }
 
     /**
      * Get the validation messages for this field.
      *
-     * - Uses explicitly provided messages if available.
-     * - Otherwise, generates default messages for each validation rule.
-     * - Ensures every rule has an associated message.
+     * - Uses explicitly provided messages from config if available.
+     * - Generates default messages using {@see DEFAULT_MESSAGES}.
+     * - Ensures every rule has a corresponding message.
+     * - Keys are always in the form "<field>.<rule>".
+     * - Returns messages in a deterministic priority order.
      *
-     * @return array<string,string> Map of rule keys to error messages.
+     * @return array<string,string>
      */
     public function getMessages(): array
     {
         /** @var array<string,string> $messages */
         $messages = $this->config['messages'] ?? [];
 
+        $normalized = [];
+
+        foreach ($messages as $key => $msg) {
+            // If key already contains a dot (e.g. "email.required"), leave it.
+            if (str_contains($key, '.')) {
+                $normalized[$key] = $msg;
+
+                continue;
+            }
+
+            // Otherwise, prefix with field name: "required" -> "email.required"
+            $normalized["{$this->name}.{$key}"] = $msg;
+        }
+
+        // Fill in defaults for any rules not covered
         foreach ($this->getRules() as $rule) {
             $ruleKey = $this->getRuleKey($rule);
-            if (! isset($messages[$ruleKey])) {
-                $messages[$ruleKey] = $this->generateDefaultMessage($ruleKey, $rule);
+            $messageKey = "{$this->name}.{$ruleKey}";
+
+            if (! isset($normalized[$messageKey])) {
+                $normalized[$messageKey] = $this->generateDefaultMessage($ruleKey, $rule);
             }
         }
 
-        return $messages;
+        return $this->normalizeMessageOrder($normalized);
     }
 
     /**
-     * Return the raw configuration for this field.
+     * Get the resolved PHP type for this field, including nullability.
      *
-     * @return FieldConfigArray
+     * Examples:
+     *  - string
+     *  - ?string
+     *  - int
+     *  - ?\DateTimeInterface
+     *  - array
+     */
+    public function getPhpType(): string
+    {
+        return TypeRuleMap::phpType($this->getType(), ! $this->isRequired());
+    }
+
+    /**
+     * Export field configuration as an enriched array,
+     * including derived properties.
+     *
+     * @return array<string,mixed>
      */
     public function toArray(): array
     {
-        return $this->config;
+        return [
+            'name' => $this->getName(),
+            'type' => $this->getType(),
+            'phpType' => $this->getPhpType(),
+            'required' => $this->isRequired(),
+            'length' => $this->getLength(),
+            'label' => $this->getAttributeLabel(),
+            'rules' => $this->getRules(),
+            'messages' => $this->getMessages(),
+            'attributes' => $this->getAttributeEntry(),
+        ];
     }
 
     /**
-     * Extract the rule key from a validation rule string.
+     * Flatten the field into a Mustache-friendly structure.
      *
-     * Examples:
-     * - `"max:255"` → `"max"`
-     * - `"string"`  → `"string"`
+     * Produces a normalized array where rules and messages
+     * are expanded into lists of objects. This allows Mustache
+     * templates to iterate without extra logic in the generator.
      *
-     * @param  string  $rule  The validation rule.
-     * @return string The rule key.
+     * @return array{
+     *     name: string,
+     *     phpType: string,
+     *     attribute: string,
+     *     rules: list<array{value:string}>,
+     *     messages: list<array{key:string,value:string}>
+     * }
+     */
+    public function toRendererArray(): array
+    {
+        $rules = [];
+        foreach ($this->getRules() as $rule) {
+            $rules[] = ['value' => $rule];
+        }
+
+        $messages = [];
+        foreach ($this->getMessages() as $ruleKey => $message) {
+            $messages[] = [
+                'key' => $ruleKey,
+                'value' => $message,
+            ];
+        }
+
+        return [
+            'name' => $this->getName(),
+            'phpType' => $this->getPhpType(),
+            'attribute' => $this->getAttributeLabel(),
+            'rules' => $rules,
+            'messages' => $messages,
+        ];
+    }
+
+    /**
+     * Extract the rule key from a full rule string.
+     *
+     * Example: "max:255" → "max"
      */
     protected function getRuleKey(string $rule): string
     {
-        return Str::contains($rule, ':') ? Str::before($rule, ':') : $rule;
+        return Str::contains($rule, ':')
+            ? Str::before($rule, ':')
+            : $rule;
     }
 
     /**
      * Generate a default validation message for a given rule.
      *
-     * @param  string  $ruleKey  The key of the rule (e.g., "required", "max").
-     * @param  string  $fullRule  The full validation rule string.
-     * @return string Human-readable validation message.
+     * Falls back to "Validation failed for :label" if the
+     * rule is not in {@see DEFAULT_MESSAGES}.
+     *
+     * @param  string  $ruleKey  The rule key (e.g., "max").
+     * @param  string  $fullRule  The full rule (e.g., "max:255").
      */
     protected function generateDefaultMessage(string $ruleKey, string $fullRule): string
     {
         $label = $this->getAttributeLabel();
 
-        return match ($ruleKey) {
-            'required' => "{$label} is required.",
-            'email' => 'Please provide a valid email address.',
-            'numeric' => "{$label} must be a number.",
-            'integer' => "{$label} must be an integer.",
-            'string' => "{$label} must be text.",
-            'boolean' => "{$label} must be true or false.",
-            'date' => "{$label} must be a valid date.",
-            'max' => $this->generateMaxMessage($fullRule, $label),
-            'min' => $this->generateMinMessage($fullRule, $label),
-            'in' => $this->generateInMessage($fullRule, $label),
-            default => "Validation failed for {$label}.",
-        };
+        $template = self::DEFAULT_MESSAGES[$ruleKey] ?? 'Validation failed for :label.';
+
+        $value = Str::after($fullRule, ':');
+        $values = $value;
+
+        return strtr($template, [
+            ':label' => $label,
+            ':value' => $value,
+            ':values' => $values,
+        ]);
     }
 
     /**
-     * Generate a default "max" validation message.
+     * Normalize message ordering for deterministic output.
      *
-     * @param  string  $rule  Full rule string, e.g. "max:255".
-     * @param  string  $label  Field label.
-     * @return string Error message.
-     */
-    protected function generateMaxMessage(string $rule, string $label): string
-    {
-        $value = Str::after($rule, ':');
-
-        return "{$label} cannot exceed {$value}.";
-    }
-
-    /**
-     * Generate a default "min" validation message.
+     * Messages are grouped by field and sorted according
+     * to {@see MESSAGE_PRIORITY}. Any unrecognized rules
+     * are appended in alphabetical order.
      *
-     * @param  string  $rule  Full rule string, e.g. "min:3".
-     * @param  string  $label  Field label.
-     * @return string Error message.
+     * @param  array<string,string>  $messages
+     * @return array<string,string>
      */
-    protected function generateMinMessage(string $rule, string $label): string
+    protected function normalizeMessageOrder(array $messages): array
     {
-        $value = Str::after($rule, ':');
+        $grouped = [];
 
-        return "{$label} must be at least {$value}.";
-    }
+        foreach ($messages as $key => $message) {
+            [$field, $rule] = explode('.', $key, 2);
+            $grouped[$field][$rule] = $message;
+        }
 
-    /**
-     * Generate a default "in" validation message.
-     *
-     * @param  string  $rule  Full rule string, e.g. "in:admin,user".
-     * @param  string  $label  Field label.
-     * @return string Error message.
-     */
-    protected function generateInMessage(string $rule, string $label): string
-    {
-        $values = Str::after($rule, ':');
+        $normalized = [];
+        foreach ($grouped as $field => $rules) {
+            // Sort by MESSAGE_PRIORITY first, then alphabetically
+            uksort($rules, function ($a, $b) {
+                $aIndex = array_search($a, self::MESSAGE_PRIORITY, true);
+                $bIndex = array_search($b, self::MESSAGE_PRIORITY, true);
 
-        return "{$label} must be one of: {$values}.";
+                if ($aIndex === false && $bIndex === false) {
+                    return strcmp($a, $b);
+                }
+                if ($aIndex === false) {
+                    return 1;
+                }
+                if ($bIndex === false) {
+                    return -1;
+                }
+
+                return $aIndex <=> $bIndex;
+            });
+
+            foreach ($rules as $rule => $message) {
+                $normalized["{$field}.{$rule}"] = $message;
+            }
+        }
+
+        return $normalized;
     }
 }

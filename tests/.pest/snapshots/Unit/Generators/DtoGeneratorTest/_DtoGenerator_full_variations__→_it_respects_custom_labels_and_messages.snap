@@ -1,0 +1,57 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Products\Data;
+
+use Flowlight\BaseData;
+use Illuminate\Validation\Rule;
+
+final class ProductData extends BaseData
+{
+    public function __construct(
+        public string $title,
+        public string $status,
+    )
+    {
+    }
+
+    /** @return array<string,string> */
+    public static function attributes(): array
+    {
+        return [
+            'title' => 'Product Title',
+            'status' => 'Status',
+        ];
+    }
+
+    /** @return array<string,string> */
+    public static function messages(): array
+    {
+        return [
+            'title.required' => 'You must provide a title!',
+            'title.string' => 'Product Title must be text.',
+            'status.required' => 'Status is required.',
+            'status.string' => 'Status must be text.',
+            'status.in' => 'Status must be one of: draft,published.',
+        ];
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected static function rules(): array
+    {
+        return [
+            'title' => [
+                'required',
+                'string',
+            ],
+            'status' => [
+                'required',
+                'string',
+                'in:draft,published',
+            ],
+        ];
+    }
+}

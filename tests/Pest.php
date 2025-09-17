@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Fluent;
 use Pest\Expectation;
 use PHPUnit\Framework\Assert;
 use SebastianBergmann\Diff\Differ;
@@ -166,3 +168,60 @@ MSG;
         Assert::fail($message);
     }
 );
+
+/**
+ * Sets up a temp directory and optional random template file,
+ * and returns a Pest fluent object.
+ */
+function setupTempDir(?string $templateContent = null): Fluent
+{
+    $files = new Filesystem;
+    $tmpPath = sys_get_temp_dir().'/flowlight_test_app_'.uniqid('', true);
+    $templateFile = null;
+
+    if ($files->isDirectory($tmpPath)) {
+        $files->deleteDirectory($tmpPath);
+    }
+
+    $files->makeDirectory($tmpPath, 0777, true);
+
+    if ($templateContent !== null) {
+        $filename = uniqid('stub_', true).'.stub';
+        $templateFile = $tmpPath.'/'.$filename;
+        $files->put($templateFile, $templateContent);
+    }
+
+    $fluent = fluent([
+        'files' => $files,
+        'tmpPath' => $tmpPath,
+        'templateFile' => $templateFile,
+    ]);
+
+    $fluent->macro('cleanup', function () {
+        if ($this->files->isDirectory($this->tmpPath)) {
+            $this->files->deleteDirectory($this->tmpPath);
+        }
+
+        return $this;
+    });
+
+    $fluent->macro('withTemplate', function (string $content, ?string $ext = 'stub') {
+        $filename = uniqid('stub_', true).'.'.$ext;
+        $this->templateFile = $this->tmpPath.'/'.$filename;
+        $this->files->put($this->templateFile, $content);
+
+        return $this;
+    });
+
+    return $fluent;
+}
+/**
+ * Cleans up a temp directory.
+ */
+function teardownTempDir(string $tmpPath): void
+{
+    $files = new Filesystem;
+    if ($files->isDirectory($tmpPath)) {
+        $files->deleteDirectory($tmpPath);
+    }
+}

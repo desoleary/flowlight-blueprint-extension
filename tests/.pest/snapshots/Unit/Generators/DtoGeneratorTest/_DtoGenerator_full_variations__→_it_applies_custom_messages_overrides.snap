@@ -1,0 +1,55 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Customers\Data;
+
+use Flowlight\BaseData;
+use Illuminate\Validation\Rule;
+
+final class CustomerData extends BaseData
+{
+    public function __construct(
+        public string $email,
+        public ?int $age,
+    )
+    {
+    }
+
+    /** @return array<string,string> */
+    public static function attributes(): array
+    {
+        return [
+            'email' => 'Email',
+            'age' => 'Age',
+        ];
+    }
+
+    /** @return array<string,string> */
+    public static function messages(): array
+    {
+        return [
+            'email.required' => 'Email is absolutely required!',
+            'email.string' => 'Email must be plain text only.',
+            'age.sometimes' => 'Age is optional.',
+            'age.integer' => 'Age must be numeric only.',
+        ];
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected static function rules(): array
+    {
+        return [
+            'email' => [
+                'required',
+                'string',
+            ],
+            'age' => [
+                'sometimes',
+                'integer',
+            ],
+        ];
+    }
+}

@@ -1,0 +1,49 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Orders\Data;
+
+use Flowlight\BaseData;
+use Illuminate\Validation\Rule;
+
+final class OrderData extends BaseData
+{
+    public function __construct(
+        public string $status,
+    )
+    {
+    }
+
+    /** @return array<string,string> */
+    public static function attributes(): array
+    {
+        return [
+            'status' => 'Status',
+        ];
+    }
+
+    /** @return array<string,string> */
+    public static function messages(): array
+    {
+        return [
+            'status.required' => 'Status is required.',
+            'status.string' => 'Status must be text.',
+            'status.in' => 'Status must be one of: pending,paid,shipped.',
+        ];
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected static function rules(): array
+    {
+        return [
+            'status' => [
+                'required',
+                'string',
+                'in:pending,paid,shipped',
+            ],
+        ];
+    }
+}
